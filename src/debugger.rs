@@ -7,7 +7,7 @@ use nix::sys::signal::Signal;
 use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
 use nix::unistd::{execv, Pid};
 use proc_maps::MapRange;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::breakpoint::Breakpoint;
 use crate::dbginfo::CMDebugInfo;
@@ -15,7 +15,7 @@ use crate::disassemble::Disassembly;
 use crate::errors::{DebuggerError, Result};
 use crate::feedback::Feedback;
 use crate::ui::{DebuggerUI, Register, Status};
-use crate::{disassemble, mem_read, mem_read_word, mem_write_word, Addr, Word};
+use crate::{mem_read, mem_read_word, mem_write_word, Addr, Word};
 
 pub struct Debugger<'executable, UI: DebuggerUI> {
     executable_path: PathBuf,
