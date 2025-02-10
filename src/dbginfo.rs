@@ -31,7 +31,7 @@ pub enum SymbolKind {
 
 #[derive(Debug, Hash, Clone, PartialEq, Eq)]
 pub struct OwnedSymbol {
-    pub code: usize,
+    pub offset: usize,
     pub name: Option<String>,
     pub low_addr: Option<Addr>,
     pub high_addr: Option<Addr>,
@@ -51,7 +51,7 @@ impl OwnedSymbol {
         children: &[Self],
     ) -> Self {
         Self {
-            code,
+            offset: code,
             name: name.map(|name| name.to_string()),
             low_addr,
             high_addr,
@@ -79,6 +79,10 @@ impl OwnedSymbol {
 
     pub fn children(&self) -> &[OwnedSymbol] {
         &self.children
+    }
+
+    pub fn datatype(&self) -> Option<usize> {
+        self.datatype
     }
 }
 

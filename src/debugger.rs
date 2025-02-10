@@ -242,6 +242,33 @@ impl<'executable> Debuggee<'executable> {
         Ok(Vec::new())
     }
 
+    pub fn get_symbol_by_offset(&self, offset: usize) -> Result<Option<OwnedSymbol>> {
+        // BUG: this might return multiple items if we're dealing with multiple
+        // compilation units
+
+        let v: Vec<OwnedSymbol> = self
+            .symbols_query(|s| s.offset == offset)
+            .into_iter()
+            .collect();
+        if v.len() > 1 {
+            panic!("multiple or no items for that offset")
+        }
+        if v.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(v[0].clone()))
+        }
+    }
+
+    #[inline]
+    pub fn get_type_for_symbol(&self, sym: &OwnedSymbol) -> Result<Option<OwnedSymbol>> {
+        if let Some(dt) = sym.datatype() {
+            self.get_symbol_by_offset(dt)
+        } else {
+            Ok(None)
+        }
+    }
+
     pub fn symbols(&self) -> &[OwnedSymbol] {
         &self.symbols
     }
