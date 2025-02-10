@@ -41,4 +41,6 @@ pub enum DebuggerError {
     StepOutMain,
     #[error("Unwind Error: {0}")]
     Unwind(#[from] unwind::Error),
+    #[error("While calculating the higher address with DWARF debug symbols, the lower address was none but the higher (offset) was some")]
+    HighAddrExistsButNotLowAddr,
 }

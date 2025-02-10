@@ -3,7 +3,7 @@ use std::ffi::CString;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 
-use gimli::{DW_AT_high_pc, DW_AT_name, Unit};
+use gimli::{DW_AT_high_pc, DW_AT_low_pc, DW_AT_name, Unit};
 use iced_x86::FormatterTextKind;
 use nix::sys::ptrace;
 use nix::sys::signal::Signal;
@@ -97,15 +97,13 @@ impl<'executable> Debuggee<'executable> {
         unit: &Unit<GimliReaderThing>,
         entry: &gimli::DebuggingInformationEntry<'_, '_, GimliReaderThing>,
     ) -> Result<OwnedSymbol> {
-        debug!("processing tag: {}", entry.tag());
-
         let base_addr = Self::get_base_addr_by_pid(pid)?;
 
         #[allow(clippy::single_match)]
         match entry.tag() {
             gimli::DW_TAG_subprogram => {
-                let high = Self::parse_addr(dwarf, unit, entry.attr(DW_AT_high_pc)?, base_addr)?;
-                let low = Self::parse_addr(dwarf, unit, entry.attr(DW_AT_high_pc)?, base_addr)?;
+                let low = Self::parse_addr_low(dwarf, unit, entry.attr(DW_AT_low_pc)?, base_addr)?;
+                let high = Self::parse_addr_high(entry.attr(DW_AT_high_pc)?, low)?;
                 let name = Self::parse_string(dwarf, unit, entry.attr(DW_AT_name)?)?;
                 let kind = SymbolKind::try_from(entry.tag())?;
                 Ok(OwnedSymbol::new(name, low, high, kind, &[]))
@@ -119,8 +117,8 @@ impl<'executable> Debuggee<'executable> {
                 // DW_AT_low_pc                0x00001139
                 // DW_AT_high_pc               <offset-from-lowpc> 83 <highpc: 0x0000118c>
                 // DW_AT_stmt_list             0x00000000
-                let high = Self::parse_addr(dwarf, unit, entry.attr(DW_AT_high_pc)?, base_addr)?;
-                let low = Self::parse_addr(dwarf, unit, entry.attr(DW_AT_high_pc)?, base_addr)?;
+                let low = Self::parse_addr_low(dwarf, unit, entry.attr(DW_AT_low_pc)?, base_addr)?;
+                let high = Self::parse_addr_high(entry.attr(DW_AT_high_pc)?, low)?;
                 let name = Self::parse_string(dwarf, unit, entry.attr(DW_AT_name)?)?;
                 let kind = SymbolKind::try_from(entry.tag())?;
                 Ok(OwnedSymbol::new(name, low, high, kind, &[]))
@@ -153,7 +151,7 @@ impl<'executable> Debuggee<'executable> {
             // Recursively process a child.
             children.push(match Self::process_tree(pid, dwarf, unit, child) {
                 Err(e) => {
-                    warn!("could not parse a leaf of the debug symbol tree: {e}");
+                    debug!("could not parse a leaf of the debug symbol tree: {e}");
                     continue;
                 }
                 Ok(s) => s,
@@ -181,8 +179,6 @@ impl<'executable> Debuggee<'executable> {
         {
             if sym.low_addr.is_some_and(|a| a <= addr) && sym.high_addr.is_some_and(|a| addr < a) {
                 return Ok(Some(sym));
-            } else {
-                trace!("it's not {:#?}", sym);
             }
         }
 
