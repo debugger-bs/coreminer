@@ -2,8 +2,10 @@ use std::collections::HashMap;
 use std::ffi::CString;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
-use gimli::{DW_AT_high_pc, DW_AT_low_pc, DW_AT_name, Reader};
+use addr2line::fallible_iterator::FallibleIterator;
+use gimli::{DW_AT_high_pc, DW_AT_low_pc, DW_AT_name, EndianReader, LittleEndian, Reader, Unit};
 use iced_x86::FormatterTextKind;
 use nix::sys::ptrace;
 use nix::sys::signal::Signal;
@@ -20,6 +22,9 @@ use crate::errors::{DebuggerError, Result};
 use crate::feedback::Feedback;
 use crate::ui::{DebuggerUI, Register, Status};
 use crate::{mem_read, mem_read_word, mem_write_word, unwind, Addr, Word};
+
+pub type VariableExpression = String;
+type GimliReaderThing = gimli::EndianReader<gimli::LittleEndian, std::rc::Rc<[u8]>>;
 
 pub struct Debugger<'executable, UI: DebuggerUI> {
     executable_path: PathBuf,
@@ -55,6 +60,75 @@ impl Debuggee<'_> {
         Ok(out)
     }
 
+    fn entry_to_owned(
+        &self,
+        unit: &Unit<GimliReaderThing>,
+        entry: &gimli::DebuggingInformationEntry<'_, '_, GimliReaderThing>,
+    ) -> Result<OwnedSymbol> {
+        let dwarf = &self.dbginfo.dwarf;
+        #[allow(clippy::single_match)]
+        match entry.tag() {
+            gimli::DW_TAG_subprogram => {
+                let high = entry.attr(DW_AT_high_pc);
+                let low = entry.attr(DW_AT_low_pc);
+                let name = entry.attr(DW_AT_name);
+                if !(entry.has_children()
+                    && high.clone().is_ok_and(|r| r.is_some())
+                    && low.clone().is_ok_and(|r| r.is_some())
+                    && name.clone().is_ok_and(|r| r.is_some()))
+                {
+                    panic!()
+                }
+
+                let la: u64 = dwarf
+                    .attr_address(unit, low.unwrap().unwrap().value())?
+                    .unwrap();
+                let ha: u64 = la + high.unwrap().unwrap().value().udata_value().unwrap();
+                let name: String = dwarf
+                    .attr_string(unit, name.unwrap().unwrap().value())?
+                    .to_string_lossy()?
+                    .to_string();
+
+                let base_addr = self.get_base_addr()?;
+                let kind = match SymbolKind::try_from(entry.tag()) {
+                    Err(e) => {
+                        warn!("{e}");
+                        panic!()
+                    }
+                    Ok(k) => k,
+                };
+
+                Ok(OwnedSymbol::new(
+                    &name,
+                    Addr::from_relative(base_addr, la as usize),
+                    Addr::from_relative(base_addr, ha as usize),
+                    kind,
+                    &[],
+                ))
+            }
+            _ => Err(DebuggerError::DwTagNotImplemented(entry.tag())),
+        }
+    }
+
+    pub fn process_tree(
+        &self,
+        unit: &Unit<GimliReaderThing>,
+        node: gimli::EntriesTreeNode<GimliReaderThing>,
+    ) -> Result<OwnedSymbol> {
+        let mut sym = self.entry_to_owned(unit, node.entry())?;
+
+        let mut children_tree = node.children();
+        let mut children = Vec::new();
+        while let Some(child) = children_tree.next()? {
+            // Recursively process a child.
+            children.push(self.process_tree(unit, child)?);
+        }
+
+        sym.children = children;
+
+        Ok(sym)
+    }
+
     pub fn get_symbols(&self) -> Result<Vec<OwnedSymbol>> {
         let dwarf = &self.dbginfo.dwarf;
         let mut symbols = Vec::new();
@@ -66,7 +140,7 @@ impl Debuggee<'_> {
             while let Some((_, entry)) = entries.next_dfs()? {
                 #[allow(clippy::single_match)]
                 match entry.tag() {
-                    gimli::DW_TAG_subprogram | gimli::DW_TAG_compile_unit => {
+                    gimli::DW_TAG_subprogram => {
                         let high = entry.attr(DW_AT_high_pc);
                         let low = entry.attr(DW_AT_low_pc);
                         let name = entry.attr(DW_AT_name);
@@ -101,6 +175,7 @@ impl Debuggee<'_> {
                             Addr::from_relative(base_addr, la as usize),
                             Addr::from_relative(base_addr, ha as usize),
                             kind,
+                            &[],
                         ))
                     }
                     _ => (),
@@ -136,6 +211,23 @@ impl Debuggee<'_> {
         }
 
         Ok(None)
+    }
+
+    pub fn get_local_variables(&self, context: Addr) -> Result<Vec<OwnedSymbol>> {
+        debug!("get locals of function {context}");
+        for sym in self
+            .get_symbols()?
+            .into_iter()
+            .filter(|a| a.kind() == SymbolKind::Function)
+        {
+            if sym.low_addr <= context && context < sym.high_addr {
+                return Ok(sym.children().to_vec());
+            } else {
+                trace!("it's not {:#?}", sym);
+            }
+        }
+
+        Ok(Vec::new())
     }
 }
 

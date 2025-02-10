@@ -27,15 +27,23 @@ pub struct OwnedSymbol {
     pub low_addr: Addr,
     pub high_addr: Addr,
     pub kind: SymbolKind,
+    pub children: Vec<OwnedSymbol>,
 }
 
 impl OwnedSymbol {
-    pub fn new(name: impl ToString, low_addr: Addr, high_addr: Addr, kind: SymbolKind) -> Self {
+    pub fn new(
+        name: impl ToString,
+        low_addr: Addr,
+        high_addr: Addr,
+        kind: SymbolKind,
+        children: &[Self],
+    ) -> Self {
         Self {
             name: name.to_string(),
             low_addr,
             high_addr,
             kind,
+            children: children.to_vec(),
         }
     }
 
@@ -53,6 +61,10 @@ impl OwnedSymbol {
 
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    pub fn children(&self) -> &[Self] {
+        &self.children
     }
 }
 
