@@ -1,8 +1,9 @@
 use std::rc::Rc;
 
-use gimli::{DW_TAG_compile_unit, DW_TAG_subprogram, EndianRcSlice, EndianReader, NativeEndian};
+use gimli::{EndianRcSlice, NativeEndian};
 use object::{Object, ObjectSection};
 
+use crate::dwarf_parse::GimliReaderThing;
 use crate::errors::{DebuggerError, Result};
 use crate::Addr;
 
@@ -12,7 +13,7 @@ type GimliRd = EndianRcSlice<NativeEndian>;
 pub struct CMDebugInfo<'executable> {
     pub object_info: object::File<'executable>,
     pub linedata: addr2line::Context<GimliRd>,
-    pub dwarf: gimli::Dwarf<EndianReader<NativeEndian, Rc<[u8]>>>,
+    pub dwarf: gimli::Dwarf<GimliReaderThing>,
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -23,23 +24,23 @@ pub enum SymbolKind {
 
 #[derive(Debug, Hash, Clone, PartialEq, Eq)]
 pub struct OwnedSymbol {
-    pub name: String,
-    pub low_addr: Addr,
-    pub high_addr: Addr,
+    pub name: Option<String>,
+    pub low_addr: Option<Addr>,
+    pub high_addr: Option<Addr>,
     pub kind: SymbolKind,
-    pub children: Vec<OwnedSymbol>,
+    pub children: Vec<Self>,
 }
 
 impl OwnedSymbol {
     pub fn new(
-        name: impl ToString,
-        low_addr: Addr,
-        high_addr: Addr,
+        name: Option<impl ToString>,
+        low_addr: Option<Addr>,
+        high_addr: Option<Addr>,
         kind: SymbolKind,
         children: &[Self],
     ) -> Self {
         Self {
-            name: name.to_string(),
+            name: name.map(|name| name.to_string()),
             low_addr,
             high_addr,
             kind,
@@ -51,19 +52,19 @@ impl OwnedSymbol {
         self.kind
     }
 
-    pub fn high_addr(&self) -> Addr {
-        self.high_addr
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
     }
 
-    pub fn low_addr(&self) -> Addr {
+    pub fn low_addr(&self) -> Option<Addr> {
         self.low_addr
     }
 
-    pub fn name(&self) -> &str {
-        &self.name
+    pub fn high_addr(&self) -> Option<Addr> {
+        self.high_addr
     }
 
-    pub fn children(&self) -> &[Self] {
+    pub fn children(&self) -> &[OwnedSymbol] {
         &self.children
     }
 }
@@ -98,8 +99,8 @@ impl TryFrom<gimli::DwTag> for SymbolKind {
     type Error = DebuggerError;
     fn try_from(value: gimli::DwTag) -> std::result::Result<Self, Self::Error> {
         Ok(match value {
-            DW_TAG_compile_unit => SymbolKind::CompileUnit,
-            DW_TAG_subprogram => SymbolKind::Function,
+            gimli::DW_TAG_compile_unit => SymbolKind::CompileUnit,
+            gimli::DW_TAG_subprogram => SymbolKind::Function,
             _ => return Err(DebuggerError::DwTagNotImplemented(value)),
         })
     }

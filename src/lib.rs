@@ -12,6 +12,7 @@ pub mod consts;
 pub mod dbginfo;
 pub mod debugger;
 pub mod disassemble;
+pub mod dwarf_parse;
 pub mod errors;
 pub mod feedback;
 pub mod ui;

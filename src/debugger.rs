@@ -2,10 +2,8 @@ use std::collections::HashMap;
 use std::ffi::CString;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 
-use addr2line::fallible_iterator::FallibleIterator;
-use gimli::{DW_AT_high_pc, DW_AT_low_pc, DW_AT_name, EndianReader, LittleEndian, Reader, Unit};
+use gimli::{DW_AT_high_pc, DW_AT_name, Unit};
 use iced_x86::FormatterTextKind;
 use nix::sys::ptrace;
 use nix::sys::signal::Signal;
@@ -18,39 +16,72 @@ use crate::breakpoint::Breakpoint;
 use crate::consts::{SI_KERNEL, TRAP_BRKPT, TRAP_TRACE};
 use crate::dbginfo::{CMDebugInfo, OwnedSymbol, SymbolKind};
 use crate::disassemble::Disassembly;
+use crate::dwarf_parse::GimliReaderThing;
 use crate::errors::{DebuggerError, Result};
 use crate::feedback::Feedback;
 use crate::ui::{DebuggerUI, Register, Status};
 use crate::{mem_read, mem_read_word, mem_write_word, unwind, Addr, Word};
 
 pub type VariableExpression = String;
-type GimliReaderThing = gimli::EndianReader<gimli::LittleEndian, std::rc::Rc<[u8]>>;
 
 pub struct Debugger<'executable, UI: DebuggerUI> {
-    executable_path: PathBuf,
-    debuggee: Option<Debuggee<'executable>>,
-    ui: UI,
+    pub(crate) executable_path: PathBuf,
+    pub(crate) debuggee: Option<Debuggee<'executable>>,
+    pub(crate) ui: UI,
 }
 
 pub struct Debuggee<'executable> {
-    pid: Pid,
-    breakpoints: HashMap<Addr, Breakpoint>,
-    dbginfo: CMDebugInfo<'executable>,
+    pub(crate) pid: Pid,
+    pub(crate) breakpoints: HashMap<Addr, Breakpoint>,
+    #[allow(dead_code)] // this is important stuff
+    pub(crate) dbginfo: CMDebugInfo<'executable>,
+    pub(crate) symbols: Vec<OwnedSymbol>,
 }
 
-impl Debuggee<'_> {
+impl<'executable> Debuggee<'executable> {
+    pub(crate) fn build(
+        pid: Pid,
+        dbginfo: CMDebugInfo<'executable>,
+        breakpoints: HashMap<Addr, Breakpoint>,
+    ) -> Result<Self> {
+        let mut symbols = Vec::new();
+        let dwarf = &dbginfo.dwarf;
+        let mut iter = dwarf.units();
+
+        while let Some(header) = iter.next()? {
+            let unit = dwarf.unit(header)?;
+            let mut tree = unit.entries_tree(None)?;
+            symbols.push(Self::process_tree(pid, dwarf, &unit, tree.root()?)?);
+        }
+
+        Ok(Self {
+            pid,
+            breakpoints,
+            dbginfo,
+            symbols,
+        })
+    }
+
     pub fn kill(&self) -> Result<()> {
         ptrace::kill(self.pid)?;
         Ok(())
     }
 
+    fn get_process_map_by_pid(pid: Pid) -> Result<Vec<MapRange>> {
+        Ok(proc_maps::get_process_maps(pid.into())?)
+    }
+
+    pub fn get_base_addr_by_pid(pid: Pid) -> Result<Addr> {
+        Ok(Self::get_process_map_by_pid(pid)?[0].start().into())
+    }
+
     #[inline]
     pub fn get_process_map(&self) -> Result<Vec<MapRange>> {
-        Ok(proc_maps::get_process_maps(self.pid.into())?)
+        Self::get_process_map_by_pid(self.pid)
     }
 
     pub fn get_base_addr(&self) -> Result<Addr> {
-        Ok(self.get_process_map()?[0].start().into())
+        Self::get_base_addr_by_pid(self.pid)
     }
 
     pub fn disassemble(&self, addr: Addr, len: usize) -> Result<Disassembly> {
@@ -60,137 +91,85 @@ impl Debuggee<'_> {
         Ok(out)
     }
 
-    fn entry_to_owned(
-        &self,
+    fn entry_from_gimli(
+        pid: Pid,
+        dwarf: &gimli::Dwarf<GimliReaderThing>,
         unit: &Unit<GimliReaderThing>,
         entry: &gimli::DebuggingInformationEntry<'_, '_, GimliReaderThing>,
     ) -> Result<OwnedSymbol> {
-        let dwarf = &self.dbginfo.dwarf;
+        debug!("processing tag: {}", entry.tag());
+
+        let base_addr = Self::get_base_addr_by_pid(pid)?;
+
         #[allow(clippy::single_match)]
         match entry.tag() {
             gimli::DW_TAG_subprogram => {
-                let high = entry.attr(DW_AT_high_pc);
-                let low = entry.attr(DW_AT_low_pc);
-                let name = entry.attr(DW_AT_name);
-                if !(entry.has_children()
-                    && high.clone().is_ok_and(|r| r.is_some())
-                    && low.clone().is_ok_and(|r| r.is_some())
-                    && name.clone().is_ok_and(|r| r.is_some()))
-                {
-                    panic!()
-                }
-
-                let la: u64 = dwarf
-                    .attr_address(unit, low.unwrap().unwrap().value())?
-                    .unwrap();
-                let ha: u64 = la + high.unwrap().unwrap().value().udata_value().unwrap();
-                let name: String = dwarf
-                    .attr_string(unit, name.unwrap().unwrap().value())?
-                    .to_string_lossy()?
-                    .to_string();
-
-                let base_addr = self.get_base_addr()?;
-                let kind = match SymbolKind::try_from(entry.tag()) {
-                    Err(e) => {
-                        warn!("{e}");
-                        panic!()
-                    }
-                    Ok(k) => k,
-                };
-
-                Ok(OwnedSymbol::new(
-                    &name,
-                    Addr::from_relative(base_addr, la as usize),
-                    Addr::from_relative(base_addr, ha as usize),
-                    kind,
-                    &[],
-                ))
+                let high = Self::parse_addr(dwarf, unit, entry.attr(DW_AT_high_pc)?, base_addr)?;
+                let low = Self::parse_addr(dwarf, unit, entry.attr(DW_AT_high_pc)?, base_addr)?;
+                let name = Self::parse_string(dwarf, unit, entry.attr(DW_AT_name)?)?;
+                let kind = SymbolKind::try_from(entry.tag())?;
+                Ok(OwnedSymbol::new(name, low, high, kind, &[]))
             }
+            gimli::DW_TAG_compile_unit => {
+                // Example values
+                // DW_AT_producer              GNU C17 14.2.0 -mtune=generic -march=x86-64 -g -fasynchronous-unwind-tables
+                // DW_AT_language              DW_LANG_C11
+                // DW_AT_name                  ./examples/dummy.c
+                // DW_AT_comp_dir              /home/plex/Dokumente/code/rs/coreminer
+                // DW_AT_low_pc                0x00001139
+                // DW_AT_high_pc               <offset-from-lowpc> 83 <highpc: 0x0000118c>
+                // DW_AT_stmt_list             0x00000000
+                let high = Self::parse_addr(dwarf, unit, entry.attr(DW_AT_high_pc)?, base_addr)?;
+                let low = Self::parse_addr(dwarf, unit, entry.attr(DW_AT_high_pc)?, base_addr)?;
+                let name = Self::parse_string(dwarf, unit, entry.attr(DW_AT_name)?)?;
+                let kind = SymbolKind::try_from(entry.tag())?;
+                Ok(OwnedSymbol::new(name, low, high, kind, &[]))
+            }
+            // gimli::DW_TAG_constant => {
+            //     todo!()
+            // }
+            // gimli::DW_TAG_variable => {
+            //     todo!()
+            // }
             _ => Err(DebuggerError::DwTagNotImplemented(entry.tag())),
         }
     }
 
-    pub fn process_tree(
-        &self,
+    // RETURNS ALL SYMBOLS!
+    //
+    // those symbols have references to their children
+    fn process_tree(
+        pid: Pid,
+        dwarf: &gimli::Dwarf<GimliReaderThing>,
         unit: &Unit<GimliReaderThing>,
         node: gimli::EntriesTreeNode<GimliReaderThing>,
     ) -> Result<OwnedSymbol> {
-        let mut sym = self.entry_to_owned(unit, node.entry())?;
+        let mut children: Vec<OwnedSymbol> = Vec::new();
+        let mut parent = Self::entry_from_gimli(pid, dwarf, unit, node.entry())?;
 
+        // then process it's children
         let mut children_tree = node.children();
-        let mut children = Vec::new();
         while let Some(child) = children_tree.next()? {
             // Recursively process a child.
-            children.push(self.process_tree(unit, child)?);
-        }
-
-        sym.children = children;
-
-        Ok(sym)
-    }
-
-    pub fn get_symbols(&self) -> Result<Vec<OwnedSymbol>> {
-        let dwarf = &self.dbginfo.dwarf;
-        let mut symbols = Vec::new();
-        let mut iter = dwarf.units();
-
-        while let Some(header) = iter.next()? {
-            let unit = dwarf.unit(header)?;
-            let mut entries = unit.entries();
-            while let Some((_, entry)) = entries.next_dfs()? {
-                #[allow(clippy::single_match)]
-                match entry.tag() {
-                    gimli::DW_TAG_subprogram => {
-                        let high = entry.attr(DW_AT_high_pc);
-                        let low = entry.attr(DW_AT_low_pc);
-                        let name = entry.attr(DW_AT_name);
-                        if !(entry.has_children()
-                            && high.clone().is_ok_and(|r| r.is_some())
-                            && low.clone().is_ok_and(|r| r.is_some())
-                            && name.clone().is_ok_and(|r| r.is_some()))
-                        {
-                            continue;
-                        }
-
-                        let la: u64 = dwarf
-                            .attr_address(&unit, low.unwrap().unwrap().value())?
-                            .unwrap();
-                        let ha: u64 = la + high.unwrap().unwrap().value().udata_value().unwrap();
-                        let name: String = dwarf
-                            .attr_string(&unit, name.unwrap().unwrap().value())?
-                            .to_string_lossy()?
-                            .to_string();
-
-                        let base_addr = self.get_base_addr()?;
-                        let kind = match SymbolKind::try_from(entry.tag()) {
-                            Err(e) => {
-                                warn!("{e}");
-                                continue;
-                            }
-                            Ok(k) => k,
-                        };
-
-                        symbols.push(OwnedSymbol::new(
-                            &name,
-                            Addr::from_relative(base_addr, la as usize),
-                            Addr::from_relative(base_addr, ha as usize),
-                            kind,
-                            &[],
-                        ))
-                    }
-                    _ => (),
+            children.push(match Self::process_tree(pid, dwarf, unit, child) {
+                Err(e) => {
+                    warn!("could not parse a leaf of the debug symbol tree: {e}");
+                    continue;
                 }
-            }
+                Ok(s) => s,
+            });
         }
 
-        Ok(symbols)
+        parent.children = children;
+        Ok(parent)
     }
 
     pub fn get_symbol_by_name(&self, name: impl Display) -> Result<Vec<OwnedSymbol>> {
         let all: Vec<OwnedSymbol> = self
-            .get_symbols()?
-            .into_iter()
-            .filter(|a| a.name() == name.to_string())
+            .symbols()
+            .iter()
+            .filter(|a| a.name() == Some(&name.to_string()))
+            .cloned()
             .collect();
 
         Ok(all)
@@ -199,11 +178,12 @@ impl Debuggee<'_> {
     pub fn get_function_by_addr(&self, addr: Addr) -> Result<Option<OwnedSymbol>> {
         debug!("get function for addr {addr}");
         for sym in self
-            .get_symbols()?
-            .into_iter()
-            .filter(|a| a.kind() == SymbolKind::Function)
+            .symbols()
+            .iter()
+            .filter(|s| s.kind() == SymbolKind::Function)
+            .cloned()
         {
-            if sym.low_addr <= addr && addr < sym.high_addr {
+            if sym.low_addr.is_some_and(|a| a <= addr) && sym.high_addr.is_some_and(|a| addr < a) {
                 return Ok(Some(sym));
             } else {
                 trace!("it's not {:#?}", sym);
@@ -213,14 +193,14 @@ impl Debuggee<'_> {
         Ok(None)
     }
 
-    pub fn get_local_variables(&self, context: Addr) -> Result<Vec<OwnedSymbol>> {
-        debug!("get locals of function {context}");
+    pub fn get_local_variables(&self, addr: Addr) -> Result<Vec<OwnedSymbol>> {
+        debug!("get locals of function {addr}");
         for sym in self
-            .get_symbols()?
-            .into_iter()
+            .symbols()
+            .iter()
             .filter(|a| a.kind() == SymbolKind::Function)
         {
-            if sym.low_addr <= context && context < sym.high_addr {
+            if sym.low_addr.is_some_and(|a| a <= addr) && sym.high_addr.is_some_and(|a| addr < a) {
                 return Ok(sym.children().to_vec());
             } else {
                 trace!("it's not {:#?}", sym);
@@ -228,6 +208,10 @@ impl Debuggee<'_> {
         }
 
         Ok(Vec::new())
+    }
+
+    pub fn symbols(&self) -> &[OwnedSymbol] {
+        &self.symbols
     }
 }
 
@@ -267,11 +251,8 @@ impl<'executable, UI: DebuggerUI> Debugger<'executable, UI> {
             }
             Ok(fr) => match fr {
                 nix::unistd::ForkResult::Parent { child: pid } => {
-                    self.debuggee = Some(Debuggee {
-                        pid,
-                        dbginfo,
-                        breakpoints: HashMap::new(),
-                    });
+                    let dbge = Debuggee::build(pid, dbginfo, HashMap::new())?;
+                    self.debuggee = Some(dbge);
                     Ok(())
                 }
                 nix::unistd::ForkResult::Child => {
@@ -349,13 +330,15 @@ impl<'executable, UI: DebuggerUI> Debugger<'executable, UI> {
         let dbge = self.debuggee.as_ref().unwrap();
         let fun = dbge.get_function_by_addr(Addr::from_relative(dbge.get_base_addr()?, 0x1140))?;
         debug!("function at 0x1140: {fun:#?}");
+        let root_syms = dbge.symbols();
+        debug!("root symbols:\n{root_syms:#?}");
 
         info!("PID: {}", dbge.pid);
         info!("base addr: {}", dbge.get_base_addr()?);
 
         let mut feedback: Feedback = Feedback::Ok;
         loop {
-            let ui_res = self.ui.process(&feedback);
+            let ui_res = self.ui.process(feedback);
             feedback = {
                 match ui_res {
                     Err(e) => {
@@ -585,7 +568,7 @@ impl<'executable, UI: DebuggerUI> Debugger<'executable, UI> {
                 .get_function_by_addr(self.get_reg(Register::rip)?.into())?;
             if let Some(s) = a {
                 debug!("step out in following function: {s:#?}");
-                if s.name() == "main" {
+                if s.name() == Some("main") {
                     error!("you're about to do something stupid: no stepping out of the earliest stack frame allowed");
                     return Err(DebuggerError::StepOutMain);
                 }
@@ -693,7 +676,7 @@ impl<'executable, UI: DebuggerUI> Debugger<'executable, UI> {
         self.err_if_no_debuggee()?;
         let dbge = self.debuggee.as_ref().unwrap();
 
-        let symbols = dbge.get_symbol_by_name(name)?;
+        let symbols: Vec<OwnedSymbol> = dbge.get_symbol_by_name(name)?;
         Ok(Feedback::Symbols(symbols))
     }
 
