@@ -166,11 +166,8 @@ impl<'executable> Debuggee<'executable> {
 
     pub fn get_symbol_by_name(&self, name: impl Display) -> Result<Vec<OwnedSymbol>> {
         let all: Vec<OwnedSymbol> = self
-            .symbols()
-            .iter()
-            .filter(|a| a.name() == Some(&name.to_string()))
-            .cloned()
-            .collect();
+            .symbols_query(|a| a.name() == Some(&name.to_string()))
+            .to_vec();
 
         Ok(all)
     }
@@ -178,9 +175,8 @@ impl<'executable> Debuggee<'executable> {
     pub fn get_function_by_addr(&self, addr: Addr) -> Result<Option<OwnedSymbol>> {
         debug!("get function for addr {addr}");
         for sym in self
-            .symbols()
+            .symbols_query(|a| a.kind() == SymbolKind::Function)
             .iter()
-            .filter(|s| s.kind() == SymbolKind::Function)
             .cloned()
         {
             if sym.low_addr.is_some_and(|a| a <= addr) && sym.high_addr.is_some_and(|a| addr < a) {
@@ -195,11 +191,7 @@ impl<'executable> Debuggee<'executable> {
 
     pub fn get_local_variables(&self, addr: Addr) -> Result<Vec<OwnedSymbol>> {
         debug!("get locals of function {addr}");
-        for sym in self
-            .symbols()
-            .iter()
-            .filter(|a| a.kind() == SymbolKind::Function)
-        {
+        for sym in self.symbols_query(|a| a.kind() == SymbolKind::Function) {
             if sym.low_addr.is_some_and(|a| a <= addr) && sym.high_addr.is_some_and(|a| addr < a) {
                 return Ok(sym.children().to_vec());
             } else {
@@ -212,6 +204,32 @@ impl<'executable> Debuggee<'executable> {
 
     pub fn symbols(&self) -> &[OwnedSymbol] {
         &self.symbols
+    }
+
+    /// like [Self::symbols] but includes all children somehow
+    pub fn symbols_query<F>(&self, fil: F) -> Vec<OwnedSymbol>
+    where
+        F: Fn(&OwnedSymbol) -> bool,
+    {
+        let mut relevant = Vec::new();
+
+        fn finder<F>(buf: &mut Vec<OwnedSymbol>, s: &OwnedSymbol, fil: &F)
+        where
+            F: Fn(&OwnedSymbol) -> bool,
+        {
+            for c in s.children() {
+                finder(buf, c, fil);
+            }
+            if fil(s) {
+                buf.push(s.clone());
+            }
+        }
+
+        for s in self.symbols() {
+            finder(&mut relevant, s, &fil);
+        }
+
+        relevant
     }
 }
 
