@@ -31,26 +31,32 @@ pub enum SymbolKind {
 
 #[derive(Debug, Hash, Clone, PartialEq, Eq)]
 pub struct OwnedSymbol {
+    pub code: usize,
     pub name: Option<String>,
     pub low_addr: Option<Addr>,
     pub high_addr: Option<Addr>,
+    pub datatype: Option<usize>,
     pub kind: SymbolKind,
     pub children: Vec<Self>,
 }
 
 impl OwnedSymbol {
     pub fn new(
+        code: usize,
         name: Option<impl ToString>,
         low_addr: Option<Addr>,
         high_addr: Option<Addr>,
         kind: SymbolKind,
+        datatype: Option<usize>,
         children: &[Self],
     ) -> Self {
         Self {
+            code,
             name: name.map(|name| name.to_string()),
             low_addr,
             high_addr,
             kind,
+            datatype,
             children: children.to_vec(),
         }
     }

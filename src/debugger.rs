@@ -3,7 +3,7 @@ use std::ffi::CString;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 
-use gimli::{DW_AT_high_pc, DW_AT_low_pc, DW_AT_name, Unit};
+use gimli::{DW_AT_high_pc, DW_AT_low_pc, DW_AT_name, DW_AT_type, Unit};
 use iced_x86::FormatterTextKind;
 use nix::sys::ptrace;
 use nix::sys::signal::Signal;
@@ -106,41 +106,73 @@ impl<'executable> Debuggee<'executable> {
                 let high = Self::parse_addr_high(entry.attr(DW_AT_high_pc)?, low)?;
                 let name = Self::parse_string(dwarf, unit, entry.attr(DW_AT_name)?)?;
                 let kind = SymbolKind::try_from(entry.tag())?;
-                Ok(OwnedSymbol::new(name, low, high, kind, &[]))
+                Ok(OwnedSymbol::new(
+                    entry.offset().0,
+                    name,
+                    low,
+                    high,
+                    kind,
+                    None,
+                    &[],
+                ))
             }
             gimli::DW_TAG_compile_unit => {
-                // Example values
-                // DW_AT_producer              GNU C17 14.2.0 -mtune=generic -march=x86-64 -g -fasynchronous-unwind-tables
-                // DW_AT_language              DW_LANG_C11
-                // DW_AT_name                  ./examples/dummy.c
-                // DW_AT_comp_dir              /home/plex/Dokumente/code/rs/coreminer
-                // DW_AT_low_pc                0x00001139
-                // DW_AT_high_pc               <offset-from-lowpc> 83 <highpc: 0x0000118c>
-                // DW_AT_stmt_list             0x00000000
                 let low = Self::parse_addr_low(dwarf, unit, entry.attr(DW_AT_low_pc)?, base_addr)?;
                 let high = Self::parse_addr_high(entry.attr(DW_AT_high_pc)?, low)?;
                 let name = Self::parse_string(dwarf, unit, entry.attr(DW_AT_name)?)?;
                 let kind = SymbolKind::try_from(entry.tag())?;
-                Ok(OwnedSymbol::new(name, low, high, kind, &[]))
+                Ok(OwnedSymbol::new(
+                    entry.offset().0,
+                    name,
+                    low,
+                    high,
+                    kind,
+                    None,
+                    &[],
+                ))
             }
             gimli::DW_TAG_base_type => {
                 let name = Self::parse_string(dwarf, unit, entry.attr(DW_AT_name)?)?;
                 let kind = SymbolKind::try_from(entry.tag())?;
-                Ok(OwnedSymbol::new(name, None, None, kind, &[]))
+                Ok(OwnedSymbol::new(
+                    entry.offset().0,
+                    name,
+                    None,
+                    None,
+                    kind,
+                    None,
+                    &[],
+                ))
             }
-            // gimli::DW_TAG_constant => {
-            //     todo!()
-            // }
             gimli::DW_TAG_variable => {
                 let name = Self::parse_string(dwarf, unit, entry.attr(DW_AT_name)?)?;
+                let datatype: Option<usize> = Self::parse_datatype(entry.attr(DW_AT_type)?)?;
                 let kind = SymbolKind::try_from(entry.tag())?;
-                Ok(OwnedSymbol::new(name, None, None, kind, &[]))
+                Ok(OwnedSymbol::new(
+                    entry.offset().0,
+                    name,
+                    None,
+                    None,
+                    kind,
+                    datatype,
+                    &[],
+                ))
             }
             _ => {
-                debug!("unknown tag type, parsing as Other: {}", entry.tag());
                 let name = Self::parse_string(dwarf, unit, entry.attr(DW_AT_name)?)?;
                 let kind = SymbolKind::try_from(entry.tag())?;
-                Ok(OwnedSymbol::new(name, None, None, kind, &[]))
+                let low = Self::parse_addr_low(dwarf, unit, entry.attr(DW_AT_low_pc)?, base_addr)?;
+                let high = Self::parse_addr_high(entry.attr(DW_AT_high_pc)?, low)?;
+                let datatype: Option<usize> = Self::parse_datatype(entry.attr(DW_AT_type)?)?;
+                Ok(OwnedSymbol::new(
+                    entry.offset().0,
+                    name,
+                    low,
+                    high,
+                    kind,
+                    datatype,
+                    &[],
+                ))
             }
         }
     }

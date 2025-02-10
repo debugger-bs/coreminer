@@ -17,7 +17,7 @@ impl Debuggee<'_> {
         Ok(if let Some(a) = attribute {
             let a: u64 = match dwarf.attr_address(unit, a.value())? {
                 None => {
-                    warn!("could somehow not parse addr: {a:?}");
+                    warn!("could not parse addr: {a:?}");
                     return Ok(None);
                 }
                 Some(a) => a,
@@ -35,7 +35,7 @@ impl Debuggee<'_> {
         Ok(if let Some(a) = attribute {
             let addr: Addr = match a.value().udata_value() {
                 None => {
-                    warn!("could somehow not parse addr: {a:?}");
+                    warn!("could not parse addr: {a:?}");
                     return Ok(None);
                 }
                 Some(a) => {
@@ -64,6 +64,21 @@ impl Debuggee<'_> {
                     .to_string_lossy()?
                     .to_string(),
             )
+        } else {
+            None
+        })
+    }
+
+    pub(crate) fn parse_datatype(
+        attribute: Option<gimli::Attribute<GimliReaderThing>>,
+    ) -> Result<Option<usize>> {
+        Ok(if let Some(a) = attribute {
+            if let gimli::AttributeValue::UnitRef(thing) = a.value() {
+                Some(thing.0)
+            } else {
+                warn!("idk");
+                None
+            }
         } else {
             None
         })
