@@ -17,9 +17,16 @@ pub struct CMDebugInfo<'executable> {
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SymbolKind {
     Function,
     CompileUnit,
+    Variable,
+    Other,
+    BaseType,
+    Constant,
+    Parameter,
+    Block,
 }
 
 #[derive(Debug, Hash, Clone, PartialEq, Eq)]
@@ -101,7 +108,15 @@ impl TryFrom<gimli::DwTag> for SymbolKind {
         Ok(match value {
             gimli::DW_TAG_compile_unit => SymbolKind::CompileUnit,
             gimli::DW_TAG_subprogram => SymbolKind::Function,
-            _ => return Err(DebuggerError::DwTagNotImplemented(value)),
+            gimli::DW_TAG_variable => SymbolKind::Variable,
+            gimli::DW_TAG_constant => SymbolKind::Constant,
+            gimli::DW_TAG_formal_parameter => SymbolKind::Parameter,
+            gimli::DW_TAG_base_type => SymbolKind::BaseType,
+            gimli::DW_TAG_try_block
+            | gimli::DW_TAG_catch_block
+            | gimli::DW_TAG_lexical_block
+            | gimli::DW_TAG_common_block => SymbolKind::Block,
+            _ => SymbolKind::Other,
         })
     }
 }

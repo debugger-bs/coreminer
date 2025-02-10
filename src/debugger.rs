@@ -123,13 +123,25 @@ impl<'executable> Debuggee<'executable> {
                 let kind = SymbolKind::try_from(entry.tag())?;
                 Ok(OwnedSymbol::new(name, low, high, kind, &[]))
             }
+            gimli::DW_TAG_base_type => {
+                let name = Self::parse_string(dwarf, unit, entry.attr(DW_AT_name)?)?;
+                let kind = SymbolKind::try_from(entry.tag())?;
+                Ok(OwnedSymbol::new(name, None, None, kind, &[]))
+            }
             // gimli::DW_TAG_constant => {
             //     todo!()
             // }
-            // gimli::DW_TAG_variable => {
-            //     todo!()
-            // }
-            _ => Err(DebuggerError::DwTagNotImplemented(entry.tag())),
+            gimli::DW_TAG_variable => {
+                let name = Self::parse_string(dwarf, unit, entry.attr(DW_AT_name)?)?;
+                let kind = SymbolKind::try_from(entry.tag())?;
+                Ok(OwnedSymbol::new(name, None, None, kind, &[]))
+            }
+            _ => {
+                debug!("unknown tag type, parsing as Other: {}", entry.tag());
+                let name = Self::parse_string(dwarf, unit, entry.attr(DW_AT_name)?)?;
+                let kind = SymbolKind::try_from(entry.tag())?;
+                Ok(OwnedSymbol::new(name, None, None, kind, &[]))
+            }
         }
     }
 
