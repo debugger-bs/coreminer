@@ -21,6 +21,7 @@ pub enum Feedback {
     Backtrace(Backtrace),
     Symbols(Vec<OwnedSymbol>),
     Variable(VariableValue),
+    Stack(crate::stack::Stack),
 }
 
 impl Display for Feedback {
@@ -36,6 +37,7 @@ impl Display for Feedback {
             Feedback::Symbols(t) => write!(f, "Symbols: {t:#?}")?,
             Feedback::Backtrace(t) => write!(f, "Backtrace: {t:#?}")?,
             Feedback::Variable(t) => write!(f, "Variable: {t:#?}")?,
+            Feedback::Stack(t) => write!(f, "Stack:\n{t}")?,
         }
 
         Ok(())

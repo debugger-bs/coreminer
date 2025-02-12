@@ -30,7 +30,12 @@ impl Stack {
 impl Display for Stack {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (idx, w) in self.words().iter().enumerate() {
-            writeln!(f, "{:<20}{:018x}", self.start_addr + (idx * WORD_BYTES), w)?;
+            writeln!(
+                f,
+                "{:<24}\t{:018x}",
+                self.start_addr + (idx * WORD_BYTES),
+                w
+            )?;
         }
         Ok(())
     }

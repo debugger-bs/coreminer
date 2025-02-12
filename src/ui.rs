@@ -22,6 +22,7 @@ pub enum Status {
     ReadMem(Addr),
     Infos,
     ReadVariable(String),
+    GetStack,
 }
 
 pub trait DebuggerUI {

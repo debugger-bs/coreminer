@@ -176,6 +176,7 @@ impl<'executable, UI: DebuggerUI> Debugger<'executable, UI> {
                         Status::StepOver => self.step_over(),
                         Status::Backtrace => self.backtrace(),
                         Status::ReadVariable(va) => self.read_variable(va),
+                        Status::GetStack => self.get_stack(),
                     },
                 }
             }
@@ -568,5 +569,13 @@ impl<'executable, UI: DebuggerUI> Debugger<'executable, UI> {
         let dbge = self.debuggee.as_ref().unwrap();
         crate::set_reg(dbge.pid, r, v)?;
         Ok(Feedback::Ok)
+    }
+
+    pub fn get_stack(&self) -> Result<Feedback> {
+        self.err_if_no_debuggee()?;
+        let dbge = self.debuggee.as_ref().unwrap();
+
+        let stack = dbge.get_stack()?;
+        Ok(Feedback::Stack(stack))
     }
 }

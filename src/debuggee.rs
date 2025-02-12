@@ -14,7 +14,8 @@ use crate::breakpoint::Breakpoint;
 use crate::dbginfo::{search_through_symbols, CMDebugInfo, OwnedSymbol, SymbolKind};
 use crate::disassemble::Disassembly;
 use crate::dwarf_parse::GimliReaderThing;
-use crate::Result;
+use crate::stack::Stack;
+use crate::{get_reg, mem_read_word, Result};
 use crate::{mem_read, Addr};
 
 pub struct Debuggee<'executable> {
@@ -264,5 +265,19 @@ impl<'executable> Debuggee<'executable> {
         F: Fn(&OwnedSymbol) -> bool,
     {
         search_through_symbols(self.symbols(), fil)
+    }
+
+    pub fn get_stack(&self) -> Result<Stack> {
+        let rbp: Addr = get_reg(self.pid, crate::Register::rbp)?.into();
+        let rsp: Addr = get_reg(self.pid, crate::Register::rsp)?.into();
+
+        let mut next: Addr = rbp;
+        let mut stack = Stack::new(rbp);
+        while next >= rsp {
+            next -= 8usize;
+            stack.push(mem_read_word(self.pid, next)?);
+        }
+
+        Ok(stack)
     }
 }
