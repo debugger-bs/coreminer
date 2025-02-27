@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1](https://github.com/debugger-bs/coreminer/compare/v0.1.0...v0.1.1) - 2025-02-27
+
+### Other
+
+- change second emoji in readme because it's not displayed correctly on some devices (#14)
+- fix github actions links in readme
+- change links from PlexSheep/repo to organization
+- set changelog
+
 ## [0.1.0] - 2025-02-26
 
 ### 🚀 Features
