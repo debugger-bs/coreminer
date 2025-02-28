@@ -513,7 +513,7 @@ impl<'executable, UI: DebuggerUI> Debugger<'executable, UI> {
     pub fn dump_regs(&self) -> Result<Feedback> {
         let dbge = self.debuggee.as_ref().ok_or(DebuggerError::NoDebugee)?;
         let regs = ptrace::getregs(dbge.pid)?;
-        Ok(Feedback::Registers(regs))
+        Ok(Feedback::Registers(regs.into()))
     }
 
     /// Cleans up resources used by the debugger

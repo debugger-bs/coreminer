@@ -14,6 +14,7 @@
 use std::fmt::Display;
 
 use nix::libc::user_regs_struct;
+use serde::Serialize;
 
 use crate::dbginfo::OwnedSymbol;
 use crate::disassemble::Disassembly;
@@ -67,7 +68,7 @@ pub enum Feedback {
     Addr(Addr),
 
     /// Register values
-    Registers(user_regs_struct),
+    Registers(UserRegs),
 
     /// Error condition
     Error(DebuggerError),
@@ -124,6 +125,71 @@ impl From<Result<Feedback, DebuggerError>> for Feedback {
         match value {
             Ok(f) => f,
             Err(e) => Feedback::Error(e),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct UserRegs {
+    pub r15: u64,
+    pub r14: u64,
+    pub r13: u64,
+    pub r12: u64,
+    pub rbp: u64,
+    pub rbx: u64,
+    pub r11: u64,
+    pub r10: u64,
+    pub r9: u64,
+    pub r8: u64,
+    pub rax: u64,
+    pub rcx: u64,
+    pub rdx: u64,
+    pub rsi: u64,
+    pub rdi: u64,
+    pub orig_rax: u64,
+    pub rip: u64,
+    pub cs: u64,
+    pub eflags: u64,
+    pub rsp: u64,
+    pub ss: u64,
+    pub fs_base: u64,
+    pub gs_base: u64,
+    pub ds: u64,
+    pub es: u64,
+    pub fs: u64,
+    pub gs: u64,
+}
+
+impl From<user_regs_struct> for UserRegs {
+    fn from(regs: user_regs_struct) -> Self {
+        Self {
+            r15: regs.r15,
+            r14: regs.r14,
+            r13: regs.r13,
+            r12: regs.r12,
+            rbp: regs.rbp,
+            rbx: regs.rbx,
+            r11: regs.r11,
+            r10: regs.r10,
+            r9: regs.r9,
+            r8: regs.r8,
+            rax: regs.rax,
+            rcx: regs.rcx,
+            rdx: regs.rdx,
+            rsi: regs.rsi,
+            rdi: regs.rdi,
+            orig_rax: regs.orig_rax,
+            rip: regs.rip,
+            cs: regs.cs,
+            eflags: regs.eflags,
+            rsp: regs.rsp,
+            ss: regs.ss,
+            fs_base: regs.fs_base,
+            gs_base: regs.gs_base,
+            ds: regs.ds,
+            es: regs.es,
+            fs: regs.fs,
+            gs: regs.gs,
         }
     }
 }
