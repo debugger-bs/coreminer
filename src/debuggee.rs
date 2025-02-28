@@ -16,7 +16,6 @@ use gimli::{
 };
 use nix::sys::ptrace;
 use nix::unistd::Pid;
-use proc_maps::MapRange;
 use tracing::{debug, warn};
 
 use crate::breakpoint::{Breakpoint, INT3_BYTE};
