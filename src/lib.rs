@@ -40,6 +40,9 @@
 //! }
 //! ```
 
+#![warn(missing_docs)]
+#![warn(clippy::empty_docs)]
+
 use std::array::TryFromSliceError;
 use std::io::{Read, Seek, Write};
 use std::str::FromStr;
