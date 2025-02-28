@@ -47,3 +47,7 @@ unwind = { version = "0.4.2", features = ["ptrace"] }
 [[bin]]
 name = "cm"
 path = "src/bins/cm.rs"
+
+[[bin]]
+name = "cmserve"
+path = "src/bins/cmserve.rs"
