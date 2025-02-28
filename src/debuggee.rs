@@ -23,6 +23,8 @@ use crate::breakpoint::{Breakpoint, INT3_BYTE};
 use crate::dbginfo::{search_through_symbols, CMDebugInfo, OwnedSymbol, SymbolKind};
 use crate::disassemble::Disassembly;
 use crate::dwarf_parse::GimliReaderThing;
+use crate::errors::DebuggerError;
+use crate::memorymap::ProcessMemoryMap;
 use crate::stack::Stack;
 use crate::{get_reg, mem_read_word, Result};
 use crate::{mem_read, Addr};
@@ -114,8 +116,8 @@ impl Debuggee {
     /// # Errors
     ///
     /// This function can fail if the process's memory map cannot be accessed.
-    fn get_process_map_by_pid(pid: Pid) -> Result<Vec<MapRange>> {
-        Ok(proc_maps::get_process_maps(pid.into())?)
+    fn get_process_map_by_pid(pid: Pid) -> Result<ProcessMemoryMap> {
+        Ok(proc_maps::get_process_maps(pid.into())?.into())
     }
 
     /// Gets the base address of a process by its PID
@@ -136,7 +138,13 @@ impl Debuggee {
     ///
     /// This function can fail if the process's memory map cannot be accessed.
     pub fn get_base_addr_by_pid(pid: Pid) -> Result<Addr> {
-        Ok(Self::get_process_map_by_pid(pid)?[0].start().into())
+        let process_map = Self::get_process_map_by_pid(pid)?;
+        if process_map.regions.is_empty() {
+            return Err(DebuggerError::NoDebugee);
+        }
+
+        // Get the start address of the first memory region
+        Ok(process_map.regions[0].start_address)
     }
 
     /// Gets the memory map of the debugged process
@@ -150,7 +158,7 @@ impl Debuggee {
     ///
     /// This function can fail if the process's memory map cannot be accessed.
     #[inline]
-    pub fn get_process_map(&self) -> Result<Vec<MapRange>> {
+    pub fn get_process_map(&self) -> Result<ProcessMemoryMap> {
         Self::get_process_map_by_pid(self.pid)
     }
 

@@ -19,6 +19,7 @@ use serde::Serialize;
 use crate::dbginfo::OwnedSymbol;
 use crate::disassemble::Disassembly;
 use crate::errors::DebuggerError;
+use crate::memorymap::ProcessMemoryMap;
 use crate::unwind::Backtrace;
 use crate::variable::VariableValue;
 use crate::{Addr, Word};
@@ -56,7 +57,7 @@ use crate::{Addr, Word};
 ///     }
 /// }
 /// ```
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub enum Feedback {
     /// Simple text message
     Text(String),
@@ -92,7 +93,7 @@ pub enum Feedback {
     Stack(crate::stack::Stack),
 
     /// Process memory map
-    ProcessMap(Vec<proc_maps::MapRange>),
+    ProcessMap(ProcessMemoryMap),
 
     /// Debuggee process exit
     Exit(i32),
