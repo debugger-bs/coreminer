@@ -14,6 +14,7 @@ use crate::errors::Result;
 use crate::Addr;
 
 use nix::unistd::Pid;
+use serde::Serialize;
 use unwind::{Accessors, AddressSpace, Byteorder, Cursor, PTraceState, RegNum};
 
 /// Represents a backtrace of the call stack
@@ -36,7 +37,7 @@ use unwind::{Accessors, AddressSpace, Byteorder, Cursor, PTraceState, RegNum};
 ///     println!("#{} {} at {:?}", i, frame.name.as_deref().unwrap_or("??"), frame.addr);
 /// }
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Backtrace {
     /// Stack frames in the backtrace
     pub frames: Vec<BacktraceFrame>,
@@ -63,7 +64,7 @@ pub struct Backtrace {
 /// // Access frame information
 /// println!("Function: {} at {}", frame.name.as_deref().unwrap_or("??"), frame.addr);
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct BacktraceFrame {
     /// Current instruction address
     pub addr: Addr,
