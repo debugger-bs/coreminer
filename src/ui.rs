@@ -16,7 +16,7 @@
 use std::ffi::CString;
 use std::path::PathBuf;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::errors::Result;
 use crate::feedback::Feedback;
@@ -47,7 +47,7 @@ pub mod json;
 /// // Command to set a register value
 /// let status = Status::SetRegister(Register::rax, 0x42);
 /// ```
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum Status {
     /// Generate a backtrace of the call stack
     Backtrace,
