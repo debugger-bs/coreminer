@@ -21,6 +21,7 @@ use crate::feedback::Feedback;
 use crate::{Addr, Register, Word};
 
 pub mod cli;
+pub mod json;
 
 /// Represents a command from the UI to the debugger
 ///
