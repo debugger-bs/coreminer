@@ -49,6 +49,7 @@ use std::str::FromStr;
 
 use nix::sys::ptrace;
 use nix::unistd::Pid;
+use serde::Serialize;
 
 use crate::errors::Result;
 
@@ -77,7 +78,7 @@ pub type Word = i64;
 pub const WORD_BYTES: usize = Word::BITS as usize / 8;
 
 /// CPU register names for x86_64 architecture
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[allow(non_camel_case_types)]
 pub enum Register {
     r15,
