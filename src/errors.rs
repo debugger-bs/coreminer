@@ -32,12 +32,12 @@ pub type Result<T> = std::result::Result<T, DebuggerError>;
 /// fn example_function() -> Result<()> {
 ///     // System error example
 ///     let file = std::fs::File::open("nonexistent_file")?;
-///     
+///
 ///     // Debugger-specific error example
 ///     if true {
 ///         return Err(DebuggerError::NoDebugee);
 ///     }
-///     
+///
 ///     Ok(())
 /// }
 /// ```
