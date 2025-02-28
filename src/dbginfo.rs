@@ -13,6 +13,7 @@ use std::rc::Rc;
 
 use gimli::{Attribute, Encoding, EndianRcSlice, NativeEndian, Reader};
 use object::{Object, ObjectSection};
+use serde::Serialize;
 
 use crate::dwarf_parse::GimliReaderThing;
 use crate::errors::{DebuggerError, Result};
@@ -44,7 +45,7 @@ pub struct CMDebugInfo<'executable> {
 ///
 /// This is not an exhaustive enumeration and merely focuses on the most
 /// important kinds for this debugger. Uncovered types are treated as [SymbolKind::Other].
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize)]
 #[non_exhaustive]
 pub enum SymbolKind {
     /// A function or method
@@ -79,7 +80,7 @@ pub enum SymbolKind {
 /// symbols that are in its scope.
 ///
 ///
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub struct OwnedSymbol {
     offset: usize,
     name: Option<String>,
@@ -88,9 +89,12 @@ pub struct OwnedSymbol {
     datatype: Option<usize>,
     kind: SymbolKind,
     children: Vec<Self>,
+    #[serde(skip)]
     location: Option<Attribute<GimliReaderThing>>,
+    #[serde(skip)]
     frame_base: Option<Attribute<GimliReaderThing>>,
     byte_size: Option<usize>,
+    #[serde(skip)] // TODO: do not skip this
     encoding: gimli::Encoding,
 }
 
