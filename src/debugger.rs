@@ -1616,9 +1616,7 @@ impl<'executable, UI: DebuggerUI> Debugger<'executable, UI> {
     /// #
     /// // Get the process memory map
     /// if let Ok(Feedback::ProcessMap(map)) = debugger.get_process_map() {
-    ///     for region in map {
-    ///         println!("{:?}", region);
-    ///     }
+    ///     println!("{:?}", map);
     /// }
     /// ```
     pub fn get_process_map(&self) -> Result<Feedback> {
