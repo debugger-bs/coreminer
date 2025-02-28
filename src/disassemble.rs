@@ -24,6 +24,7 @@ use iced_x86::{
     Decoder, DecoderOptions, Formatter, FormatterOutput, FormatterTextKind, Instruction,
     NasmFormatter,
 };
+use serde::{Serialize, Serializer};
 
 /// Type alias for text content in disassembled code
 ///
@@ -33,6 +34,12 @@ use iced_x86::{
 /// This can later be used by a [crate::ui::DebuggerUI] to color different parts of the
 /// disassembly.
 pub type TextContent = (String, FormatterTextKind);
+
+#[derive(Serialize)]
+struct SerializableTextContent {
+    text: String,
+    kind: String,
+}
 
 /// Custom output container for the disassembly formatter
 ///
@@ -114,9 +121,10 @@ struct DisassemblyOutput(Vec<TextContent>);
 ///     println!();
 /// }
 /// ```
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, Serialize)]
 pub struct Disassembly {
     // addres, raw data, interpreted data for display, is it a breakpoint?
+    #[serde(serialize_with = "serialize_disassembly_vec")]
     vec: Vec<(Addr, Vec<u8>, Vec<TextContent>, bool)>,
 }
 
@@ -338,4 +346,38 @@ impl Display for Disassembly {
         }
         Ok(())
     }
+}
+
+impl From<&TextContent> for SerializableTextContent {
+    fn from(content: &TextContent) -> Self {
+        Self {
+            text: content.0.clone(),
+            kind: format!("{:?}", content.1),
+        }
+    }
+}
+
+fn serialize_disassembly_vec<S>(
+    data: &Vec<(Addr, Vec<u8>, Vec<TextContent>, bool)>,
+    serializer: S,
+) -> std::result::Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let serializable_data: Vec<(Addr, Vec<u8>, Vec<SerializableTextContent>, bool)> = data
+        .iter()
+        .map(|(addr, raw, content, has_bp)| {
+            (
+                *addr,
+                raw.clone(),
+                content
+                    .iter()
+                    .map(|c| SerializableTextContent::from(c))
+                    .collect(),
+                *has_bp,
+            )
+        })
+        .collect();
+
+    serializable_data.serialize(serializer)
 }
