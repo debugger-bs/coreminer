@@ -18,6 +18,8 @@
 use std::fmt::Display;
 use std::ops::{Add, AddAssign, Sub, SubAssign};
 
+use serde::Serialize;
+
 use crate::Word;
 
 /// Raw pointer type used for interoperating with C functions
@@ -43,7 +45,7 @@ pub type RawPointer = *mut std::ffi::c_void;
 /// // Format the address for display
 /// assert_eq!(format!("{}", addr), "0x0000000000001000");
 /// ```
-#[derive(Hash, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Hash, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub struct Addr(usize);
 
 impl Addr {
