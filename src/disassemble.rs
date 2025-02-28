@@ -370,10 +370,7 @@ where
             (
                 *addr,
                 raw.clone(),
-                content
-                    .iter()
-                    .map(|c| SerializableTextContent::from(c))
-                    .collect(),
+                content.iter().map(SerializableTextContent::from).collect(),
                 *has_bp,
             )
         })

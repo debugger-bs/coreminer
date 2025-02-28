@@ -8,7 +8,6 @@
 //! operations, from system-level errors to debug information parsing issues.
 
 use gimli::DwTag;
-use serde::Serialize;
 use thiserror::Error;
 
 use crate::dbginfo::SymbolKind;
