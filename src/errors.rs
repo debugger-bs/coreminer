@@ -8,6 +8,7 @@
 //! operations, from system-level errors to debug information parsing issues.
 
 use gimli::DwTag;
+use serde::Serialize;
 use thiserror::Error;
 
 use crate::dbginfo::SymbolKind;
@@ -105,4 +106,6 @@ pub enum DebuggerError {
     AlreadyRunning,
     #[error("Found multiple DWARF entries for an operation that was supposed to only find one")]
     MultipleDwarfEntries,
+    #[error("Working with JSON failed: {0}")]
+    Json(#[from] serde_json::Error),
 }
