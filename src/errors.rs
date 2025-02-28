@@ -8,6 +8,7 @@
 //! operations, from system-level errors to debug information parsing issues.
 
 use gimli::DwTag;
+use serde::{Serialize, Serializer};
 use thiserror::Error;
 
 use crate::dbginfo::SymbolKind;
@@ -107,4 +108,64 @@ pub enum DebuggerError {
     MultipleDwarfEntries,
     #[error("Working with JSON failed: {0}")]
     Json(#[from] serde_json::Error),
+}
+
+// Create a serializable representation of errors
+#[derive(Serialize)]
+struct SerializableError {
+    error_type: String,
+    message: String,
+}
+
+// Add this implementation instead of deriving Serialize
+impl Serialize for DebuggerError {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        // Convert the error to a serializable format
+        let error_type = match self {
+            DebuggerError::Os(_) => "OS",
+            DebuggerError::Io(_) => "IO",
+            DebuggerError::ExecutableDoesNotExist(_) => "DoesNotExist",
+            DebuggerError::ExecutableIsNotAFile(_) => "Is NotAFile",
+            DebuggerError::CStringConv(_) => "CStringConversion",
+            DebuggerError::NoDebugee => "NoDebuggee",
+            DebuggerError::BreakpointIsAlreadyEnabled => "BreakpointAlreadyEnabled",
+            DebuggerError::BreakpointIsAlreadyDisabled => "BreakpointAlreadyDisabled",
+            DebuggerError::ParseInt(_) => "ParseInt",
+            DebuggerError::ParseStr(_) => "ParseString",
+            DebuggerError::CliUiDialogueError(_) => "UIDialogue",
+            DebuggerError::Object(_) => "Object",
+            DebuggerError::Dwarf(_) => "DWARF",
+            DebuggerError::GimliLoad => "GimliLoad",
+            DebuggerError::Format(_) => "Format",
+            DebuggerError::DwTagNotImplemented(_) => "DwTagNotImplemented",
+            DebuggerError::StepOutMain => "OutMain",
+            DebuggerError::Unwind(_) => "Unwind",
+            DebuggerError::HighAddrExistsButNotLowAddr => "AddrExistsButNotLowAddr",
+            DebuggerError::UnimplementedRegister(_) => "UnimplementedRegister",
+            DebuggerError::WrongSymbolKind(_) => "WrongSymbolKind",
+            DebuggerError::VariableSymbolNoType => "SymbolNoType",
+            DebuggerError::SymbolHasNoLocation => "HasNoLocation",
+            DebuggerError::AmbiguousVarExpr(_) => "AmbiguousVariableExpression",
+            DebuggerError::VarExprReturnedNothing(_) => "ExpressionReturnedNothing",
+            DebuggerError::NoDatatypeFound => "NoDatatypeFound",
+            DebuggerError::NotInFunction => "NotInFunction",
+            DebuggerError::AttributeDoesNotExist(_) => "DoesNotExist",
+            DebuggerError::NoFrameInfo => "NoFrameInfo",
+            DebuggerError::AlreadyRunning => "AlreadyRunning",
+            DebuggerError::MultipleDwarfEntries => "MultipleDWARFEntries",
+            DebuggerError::Json(_) => "Json",
+        };
+
+        // Use Display implementation to get error message
+        let message = self.to_string();
+
+        SerializableError {
+            error_type: error_type.to_string(),
+            message,
+        }
+        .serialize(serializer)
+    }
 }
