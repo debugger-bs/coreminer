@@ -1,17 +1,28 @@
 use std::io::{BufRead, BufReader};
 
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tracing::error;
 
 use crate::errors::Result;
+use crate::feedback::Feedback;
 
-use super::DebuggerUI;
+use super::{DebuggerUI, Status};
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Input {
+    pub status: Status,
+}
 
 pub struct JsonUI {}
 
 impl JsonUI {
     pub fn build() -> Result<Self> {
         Ok(JsonUI {})
+    }
+
+    pub fn format_feedback(&self, feedback: &Feedback) -> Result<serde_json::Value> {
+        Ok(json!({ "feedback": feedback }))
     }
 }
 
@@ -24,13 +35,14 @@ impl DebuggerUI for JsonUI {
         loop {
             buf.clear();
             reader.read_until(b'\n', &mut buf)?;
-            match serde_json::from_slice(&buf) {
-                Ok(a) => return Ok(a),
+            let input: Input = match serde_json::from_slice(&buf) {
+                Ok(a) => a,
                 Err(e) => {
                     error!("{e}");
                     continue;
                 }
-            }
+            };
+            return Ok(input.status);
         }
     }
 }
