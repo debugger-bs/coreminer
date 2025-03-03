@@ -59,6 +59,7 @@ impl Addr {
     /// let addr = Addr::from(0x1234usize);
     /// assert_eq!(addr.usize(), 0x1234);
     /// ```
+    #[must_use]
     pub fn usize(&self) -> usize {
         self.0
     }
@@ -72,6 +73,7 @@ impl Addr {
     /// let addr = Addr::from(0x1234usize);
     /// assert_eq!(addr.u64(), 0x1234u64);
     /// ```
+    #[must_use]
     pub fn u64(&self) -> u64 {
         self.0 as u64
     }
@@ -88,6 +90,7 @@ impl Addr {
     /// let ptr = addr.raw_pointer();
     /// // Use ptr with FFI functions
     /// ```
+    #[must_use]
     pub fn raw_pointer(&self) -> RawPointer {
         self.0 as RawPointer
     }
@@ -115,25 +118,25 @@ impl Add<usize> for Addr {
 
 impl AddAssign for Addr {
     fn add_assign(&mut self, rhs: Self) {
-        self.0 += rhs.0
+        self.0 += rhs.0;
     }
 }
 
 impl AddAssign<usize> for Addr {
     fn add_assign(&mut self, rhs: usize) {
-        self.0 += rhs
+        self.0 += rhs;
     }
 }
 
 impl SubAssign for Addr {
     fn sub_assign(&mut self, rhs: Self) {
-        self.0 -= rhs.0
+        self.0 -= rhs.0;
     }
 }
 
 impl SubAssign<usize> for Addr {
     fn sub_assign(&mut self, rhs: usize) {
-        self.0 -= rhs
+        self.0 -= rhs;
     }
 }
 
@@ -215,6 +218,6 @@ mod test {
     fn test_addr_conversions() {
         let a = Addr::from(0x1234usize);
         assert_eq!(a.u64(), 0x1234u64);
-        assert_eq!(format!("{}", a), "0x0000000000001234");
+        assert_eq!(format!("{a}"), "0x0000000000001234");
     }
 }

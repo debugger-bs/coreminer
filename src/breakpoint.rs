@@ -20,11 +20,11 @@ use crate::{mem_read_word, mem_write_word, Addr};
 pub const MASK_ALL: i64 = -1; // yup for real, two's complement
 /// The INT3 instruction byte (0xCC) used for software breakpoints
 pub const INT3_BYTE: u8 = 0xcc;
-/// INT3_BYTE represented as a [crate::Word]
+/// `INT3_BYTE` represented as a [`crate::Word`]
 pub const INT3: i64 = INT3_BYTE as i64;
 /// Mask to isolate the lowest byte in a Word
-pub const WORD_MASK: i64 = 0x00000000000000ff;
-/// Inverse of WORD_MASK (all bits set except the lowest byte)
+pub const WORD_MASK: i64 = 0x0000_0000_0000_00ff;
+/// Inverse of `WORD_MASK` (all bits set except the lowest byte)
 pub const WORD_MASK_INV: i64 = MASK_ALL ^ WORD_MASK;
 
 /// Represents a breakpoint in the debugged process
@@ -41,7 +41,7 @@ pub const WORD_MASK_INV: i64 = MASK_ALL ^ WORD_MASK;
 /// artificial `INT3` with the original byte.
 ///
 /// When a [Breakpoint] is dropped while still enabled, it is automatically disabled, see
-/// [Breakpoint::drop].
+/// [`Breakpoint::drop`].
 ///
 /// # Examples
 ///
@@ -90,6 +90,7 @@ impl Breakpoint {
     /// let mut bp = Breakpoint::new(Pid::from_raw(1234), Addr::from(0x000055dd73ea3fb8usize));
     /// assert!(!bp.is_enabled());
     /// ```
+    #[must_use]
     pub fn new(pid: Pid, addr: Addr) -> Self {
         Self {
             pid,
@@ -106,6 +107,7 @@ impl Breakpoint {
     /// * `false` if the breakpoint is disabled (original instruction is in place)
     ///
     #[inline]
+    #[must_use]
     pub fn is_enabled(&self) -> bool {
         self.saved_data.is_some()
     }
@@ -137,6 +139,7 @@ impl Breakpoint {
     /// bp.enable().unwrap();
     /// assert!(bp.is_enabled());
     /// ```
+    #[allow(clippy::missing_panics_doc)] // this cant panic
     pub fn enable(&mut self) -> Result<()> {
         if self.is_enabled() {
             return Err(DebuggerError::BreakpointIsAlreadyEnabled);
@@ -183,6 +186,7 @@ impl Breakpoint {
     /// bp.disable().unwrap();
     /// assert!(!bp.is_enabled());
     /// ```
+    #[allow(clippy::missing_panics_doc)] // this cant panic
     pub fn disable(&mut self) -> Result<()> {
         if !self.is_enabled() {
             return Err(DebuggerError::BreakpointIsAlreadyDisabled);
@@ -190,7 +194,8 @@ impl Breakpoint {
 
         let data_word: i64 = mem_read_word(self.pid, self.addr)?;
         trace!("breakpo: {data_word:016x}");
-        let data_word_restored: i64 = (data_word & WORD_MASK_INV) | self.saved_data.unwrap() as i64;
+        let data_word_restored: i64 =
+            (data_word & WORD_MASK_INV) | i64::from(self.saved_data.unwrap());
         trace!("restore: {data_word_restored:016x}");
         mem_write_word(self.pid, self.addr, data_word_restored)?;
         self.saved_data = None;
@@ -218,6 +223,7 @@ impl Breakpoint {
     /// bp.enable().unwrap();
     /// assert!(bp.saved_data().is_some());
     /// ```
+    #[must_use]
     pub fn saved_data(&self) -> Option<u8> {
         self.saved_data
     }
@@ -236,7 +242,7 @@ impl Drop for Breakpoint {
     fn drop(&mut self) {
         if self.is_enabled() {
             self.disable()
-                .expect("could not disable breakpoint while dropping")
+                .expect("could not disable breakpoint while dropping");
         }
     }
 }
@@ -248,6 +254,6 @@ mod test {
         assert_eq!(
             &(-1i64).to_le_bytes(),
             &[0xffu8, 0xffu8, 0xffu8, 0xffu8, 0xffu8, 0xffu8, 0xffu8, 0xffu8,]
-        )
+        );
     }
 }
