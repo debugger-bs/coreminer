@@ -109,7 +109,7 @@ impl Debuggee {
     ///
     /// # Returns
     ///
-    /// * `Ok(Vec<MapRange>)` - The memory map of the process
+    /// * `Ok(ProcessMemoryMap)` - The memory map of the process
     /// * `Err(DebuggerError)` - If the memory map could not be retrieved
     ///
     /// # Errors
@@ -150,7 +150,7 @@ impl Debuggee {
     ///
     /// # Returns
     ///
-    /// * `Ok(Vec<MapRange>)` - The memory map of the process
+    /// * `Ok(ProcessMemoryMap)` - The memory map of the process
     /// * `Err(DebuggerError)` - If the memory map could not be retrieved
     ///
     /// # Errors

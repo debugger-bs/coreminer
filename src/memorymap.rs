@@ -39,7 +39,6 @@ impl From<Vec<proc_maps::MapRange>> for ProcessMemoryMap {
         let regions: Vec<MemoryRegion> = ranges
             .iter()
             .map(|range| {
-                // Correctly use MapRange API
                 let start = range.start();
                 let size = range.size();
                 let end = start + size;
