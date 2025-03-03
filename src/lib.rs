@@ -41,6 +41,13 @@
 //! ```
 
 #![warn(missing_docs)]
+#![warn(clippy::missing_errors_doc)]
+#![warn(clippy::missing_panics_doc)]
+#![warn(clippy::missing_safety_doc)]
+#![warn(clippy::panic)]
+#![warn(clippy::todo)]
+#![warn(clippy::pedantic)]
+#![warn(clippy::all)]
 #![warn(clippy::empty_docs)]
 
 use std::array::TryFromSliceError;
