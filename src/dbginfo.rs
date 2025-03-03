@@ -79,7 +79,8 @@ pub enum SymbolKind {
 /// information, including its name, address range, type information, and children
 /// symbols that are in its scope.
 ///
-///
+/// Note that `encoding`, `frame_base` and `location` are skipped when serializing this with
+/// [`serde`], as they are [`gimli`] datatypes.
 #[derive(Clone, Serialize)]
 pub struct OwnedSymbol {
     offset: usize,
@@ -94,7 +95,7 @@ pub struct OwnedSymbol {
     #[serde(skip)]
     frame_base: Option<Attribute<GimliReaderThing>>,
     byte_size: Option<usize>,
-    #[serde(skip)] // TODO: do not skip this
+    #[serde(skip)]
     encoding: gimli::Encoding,
 }
 
