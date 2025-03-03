@@ -49,6 +49,13 @@
 #![warn(clippy::pedantic)]
 #![warn(clippy::all)]
 #![warn(clippy::empty_docs)]
+// i64 to u64 is not always working, trust the user not
+// to do something stupid for that
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::cast_possible_wrap)]
+// I'm not doing state machines, and renaming true and false makes no sense
+#![allow(clippy::struct_excessive_bools)]
 
 use std::array::TryFromSliceError;
 use std::io::{Read, Seek, Write};
