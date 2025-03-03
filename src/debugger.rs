@@ -146,6 +146,10 @@ impl<'executable, UI: DebuggerUI> Debugger<'executable, UI> {
     /// * `Ok(Debugger)` - A new debugger instance
     /// * `Err(DebuggerError)` - If the debugger could not be created
     ///
+    /// # Errors
+    ///
+    /// Cannot fail.
+    ///
     /// # Examples
     ///
     /// ```
@@ -212,7 +216,7 @@ impl<'executable, UI: DebuggerUI> Debugger<'executable, UI> {
             }
             Ok(fr) => match fr {
                 nix::unistd::ForkResult::Parent { child: pid } => {
-                    let dbge = Debuggee::build(pid, dbginfo, HashMap::new())?;
+                    let dbge = Debuggee::build(pid, &dbginfo, HashMap::new())?;
                     self.debuggee = Some(dbge);
                     Ok(())
                 }
@@ -343,12 +347,13 @@ impl<'executable, UI: DebuggerUI> Debugger<'executable, UI> {
     /// }
     /// ```
     pub fn wait(&self, options: &[WaitPidFlag]) -> Result<WaitStatus> {
+        let dbge = self.debuggee.as_ref().ok_or(DebuggerError::NoDebugee)?;
         let mut flags = WaitPidFlag::empty();
         for f in options {
             flags |= *f;
         }
         Ok(waitpid(
-            self.debuggee.as_ref().unwrap().pid,
+            dbge.pid,
             if flags.is_empty() { None } else { Some(flags) },
         )?)
     }
@@ -388,7 +393,7 @@ impl<'executable, UI: DebuggerUI> Debugger<'executable, UI> {
         if self.debuggee.as_ref().is_some() {
             self.wait_signal()?; // wait until the debuggee is stopped
         } else {
-            info!("debuggee not yet launched")
+            info!("debuggee not yet launched");
         }
 
         let mut feedback: Feedback = Feedback::Ok;
@@ -417,8 +422,8 @@ impl<'executable, UI: DebuggerUI> Debugger<'executable, UI> {
                         Status::StepInto => self.step_into(),
                         Status::StepOver => self.step_over(),
                         Status::Backtrace => self.backtrace(),
-                        Status::ReadVariable(va) => self.read_variable(va),
-                        Status::WriteVariable(va, val) => self.write_variable(va, val),
+                        Status::ReadVariable(va) => self.read_variable(&va),
+                        Status::WriteVariable(va, val) => self.write_variable(&va, val),
                         Status::GetStack => self.get_stack(),
                         Status::ProcMap => self.get_process_map(),
                         Status::Run(exe, args) => self.run(&exe, &args),
@@ -529,7 +534,7 @@ impl<'executable, UI: DebuggerUI> Debugger<'executable, UI> {
     /// # Errors
     ///
     /// This function can fail if:
-    /// - The exists but debuggee cannot be killed with [Debuggee::kill]
+    /// - The exists but debuggee cannot be killed with [`Debuggee::kill`]
     ///
     /// # Examples
     ///
@@ -706,7 +711,7 @@ impl<'executable, UI: DebuggerUI> Debugger<'executable, UI> {
     /// ```
     pub fn single_step(&mut self) -> Result<Feedback> {
         if self.go_back_step_over_bp()? {
-            info!("breakpoint before, caught up and continueing with single step")
+            info!("breakpoint before, caught up and continueing with single step");
         }
         let dbge = self.debuggee.as_ref().ok_or(DebuggerError::NoDebugee)?;
 
@@ -758,12 +763,9 @@ impl<'executable, UI: DebuggerUI> Debugger<'executable, UI> {
     /// debugger.step_out().unwrap();
     /// ```
     pub fn step_out(&mut self) -> Result<Feedback> {
+        let dbge = self.debuggee.as_ref().ok_or(DebuggerError::NoDebugee)?;
         {
-            let a = self
-                .debuggee
-                .as_ref()
-                .ok_or(DebuggerError::NoDebugee)?
-                .get_function_by_addr(self.get_reg(Register::rip)?.into())?;
+            let a = dbge.get_function_by_addr(self.get_reg(Register::rip)?.into())?;
             if let Some(s) = a {
                 debug!("step out in following function: {s:#?}");
                 if s.name() == Some("main") {
@@ -776,22 +778,15 @@ impl<'executable, UI: DebuggerUI> Debugger<'executable, UI> {
         }
 
         let stack_frame_pointer: Addr = self.get_reg(Register::rbp)?.into();
-        let return_addr: Addr =
-            mem_read_word(self.debuggee.as_ref().unwrap().pid, stack_frame_pointer + 8)?.into();
+        let return_addr: Addr = mem_read_word(dbge.pid, stack_frame_pointer + 8)?.into();
         trace!("rsb: {stack_frame_pointer}");
         trace!("ret_addr: {return_addr}");
 
-        let should_remove_breakpoint = if !self
-            .debuggee
-            .as_ref()
-            .unwrap()
-            .breakpoints
-            .contains_key(&return_addr)
-        {
+        let should_remove_breakpoint = if dbge.breakpoints.contains_key(&return_addr) {
+            false
+        } else {
             self.set_bp(return_addr)?;
             true
-        } else {
-            false
         };
 
         self.cont(None)?;
@@ -866,13 +861,20 @@ impl<'executable, UI: DebuggerUI> Debugger<'executable, UI> {
     /// - The debuggee is not running
     /// - Register operations fail
     /// - Breakpoint operations fail
+    #[allow(clippy::missing_panics_doc)] // this function cant panic
     pub fn go_back_step_over_bp(&mut self) -> Result<bool> {
+        if self.debuggee.is_none() {
+            return Err(DebuggerError::NoDebugee);
+        }
+
         let maybe_bp_addr: Addr = self.get_current_addr()? - 1;
         trace!("Checkinf if {maybe_bp_addr} had a breakpoint");
 
         if self
             .debuggee
             .as_mut()
+            // safe because we check earlier, needed because we use a mutable reference
+            // and can only drop in place this way
             .unwrap()
             .breakpoints
             .get_mut(&maybe_bp_addr)
@@ -1014,7 +1016,7 @@ impl<'executable, UI: DebuggerUI> Debugger<'executable, UI> {
         match siginfo.si_code {
             SI_KERNEL => trace!("SI_KERNEL"), // we don't know what do do?
             TRAP_BRKPT => {
-                trace!("TRAP_BRKPT")
+                trace!("TRAP_BRKPT");
             }
             TRAP_TRACE => trace!("TRAP_TRACE"), // single stepping
             _ => warn!("Strange SIGTRAP code: {}", siginfo.si_code),
@@ -1115,12 +1117,18 @@ impl<'executable, UI: DebuggerUI> Debugger<'executable, UI> {
     /// // Step into the next function call
     /// debugger.step_into().unwrap();
     /// ```
+    #[allow(clippy::missing_panics_doc)] // this function cannot panic
     pub fn step_into(&mut self) -> Result<Feedback> {
+        if self.debuggee.is_none() {
+            return Err(DebuggerError::NoDebugee);
+        }
         self.go_back_step_over_bp()?;
 
         loop {
             let rip: Addr = (self.get_reg(Register::rip)?).into();
             let disassembly: Disassembly =
+                // unwrap is safe because we check earlier, needed because we need the mutable 
+                // reference
                 self.debuggee.as_ref().unwrap().disassemble(rip, 8, true)?;
             let next_instruction = &disassembly.inner()[0];
             let operator = next_instruction.2[0].clone();
@@ -1128,12 +1136,13 @@ impl<'executable, UI: DebuggerUI> Debugger<'executable, UI> {
             if operator.1 != FormatterTextKind::Mnemonic {
                 error!("could not read operator from disassembly");
             }
+            // PERF: this is very inefficient :/ maybe remove the autostepper or work with continue
+            // somehow
             if operator.0.trim() == "call" {
                 self.single_step()?;
                 break;
-            } else {
-                self.single_step()?; // PERF: this is very inefficient :/ maybe remove the autostepper
             }
+            self.single_step()?;
         }
 
         Ok(Feedback::Ok)
@@ -1141,7 +1150,7 @@ impl<'executable, UI: DebuggerUI> Debugger<'executable, UI> {
 
     /// Steps over a function call
     ///
-    /// This function combines step_into and step_out to step over a function call.
+    /// This function combines [`Self::step_into`] and [`Self::step_out`] to step over a function call.
     ///
     /// # Returns
     ///
@@ -1337,12 +1346,12 @@ impl<'executable, UI: DebuggerUI> Debugger<'executable, UI> {
     ///     println!("count = {:?}", value);
     /// }
     /// ```
-    pub fn read_variable(&self, expression: VariableExpression) -> Result<Feedback> {
+    pub fn read_variable(&self, expression: &VariableExpression) -> Result<Feedback> {
         let dbge = self.debuggee.as_ref().ok_or(DebuggerError::NoDebugee)?;
 
-        let (_, var, frame_info) = self.prepare_variable_access(&expression)?;
+        let (_, symbol, frame_info) = self.prepare_variable_access(expression)?;
 
-        let val = dbge.var_read(&var, &frame_info)?;
+        let val = dbge.var_read(&symbol, &frame_info)?;
 
         Ok(Feedback::Variable(val))
     }
@@ -1382,12 +1391,12 @@ impl<'executable, UI: DebuggerUI> Debugger<'executable, UI> {
     /// ```
     pub fn write_variable(
         &self,
-        expression: VariableExpression,
+        expression: &VariableExpression,
         value: impl Into<VariableValue>,
     ) -> Result<Feedback> {
         let dbge = self.debuggee.as_ref().ok_or(DebuggerError::NoDebugee)?;
 
-        let (_, var, frame_info) = self.prepare_variable_access(&expression)?;
+        let (_, var, frame_info) = self.prepare_variable_access(expression)?;
 
         dbge.var_write(&var, &frame_info, value.into())?;
 

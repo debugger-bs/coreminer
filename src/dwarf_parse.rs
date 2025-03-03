@@ -45,7 +45,7 @@ pub struct FrameInfo {
 }
 
 impl FrameInfo {
-    /// Creates a new FrameInfo instance
+    /// Creates a new [`FrameInfo`] instance
     ///
     /// # Parameters
     ///
@@ -59,7 +59,8 @@ impl FrameInfo {
     /// # Examples
     ///
     /// You could just fill this with any [Addr], but it's more complicated.
-    /// See [crate::debugger::Debugger::prepare_variable_access].
+    /// See [`crate::debugger::Debugger::prepare_variable_access`].
+    #[must_use]
     pub fn new(frame_base: Option<Addr>, canonical_frame_address: Option<Addr>) -> FrameInfo {
         FrameInfo {
             frame_base,
@@ -75,6 +76,7 @@ impl FrameInfo {
     /// # Returns
     ///
     /// The Canonical Frame Address, if available
+    #[must_use]
     pub fn canonical_frame_address(&self) -> Option<Addr> {
         self.canonical_frame_address
     }
@@ -87,6 +89,7 @@ impl FrameInfo {
     /// # Returns
     ///
     /// The frame base address, if available
+    #[must_use]
     pub fn frame_base(&self) -> Option<Addr> {
         self.frame_base
     }
@@ -217,9 +220,8 @@ impl Debuggee {
     ///
     /// # Returns
     ///
-    /// * `Ok(Some(usize))` - The parsed datatype reference
-    /// * `Ok(None)` - If the attribute is not present
-    /// * `Err(DebuggerError)` - If parsing failed
+    /// * `Some(usize)` - The parsed datatype reference
+    /// * `None` - If the attribute is not present
     ///
     /// # Errors
     ///
@@ -227,8 +229,8 @@ impl Debuggee {
     /// - The attribute value is not a valid unit reference
     pub(crate) fn parse_datatype(
         attribute: Option<gimli::Attribute<GimliReaderThing>>,
-    ) -> Result<Option<usize>> {
-        Ok(if let Some(a) = attribute {
+    ) -> Option<usize> {
+        if let Some(a) = attribute {
             if let gimli::AttributeValue::UnitRef(thing) = a.value() {
                 Some(thing.0)
             } else {
@@ -237,7 +239,7 @@ impl Debuggee {
             }
         } else {
             None
-        })
+        }
     }
 
     /// Parses a DWARF location attribute
@@ -275,7 +277,7 @@ impl Debuggee {
             gimli::AttributeValue::Exprloc(expr) => {
                 self.eval_expression(expr, frame_info, encoding)
             }
-            _ => panic!("we did not know a location could be this"),
+            _ => unimplemented!("we did not know a location could be this"),
         }
     }
 
@@ -333,8 +335,8 @@ impl Debuggee {
                     res = evaluation.resume_with_memory(value)?;
                 }
                 gimli::EvaluationResult::RequiresRegister { register, .. /* ignore the actual type and give as word */ } => {
-                    let reg= crate::Register::try_from(register)?;
-                    let reg_value = crate::get_reg(self.pid, reg)?;
+                    let reg_kind= crate::Register::try_from(register)?;
+                    let reg_value = crate::get_reg(self.pid, reg_kind)?;
                     res = evaluation.resume_with_register(gimli::Value::from_u64(gimli::ValueType::Generic, reg_value)?)?;
                 }
                 gimli::EvaluationResult::RequiresFrameBase =>{
@@ -359,7 +361,9 @@ impl Debuggee {
 
         if pieces.is_empty() {
             warn!("really? we did all that parsing and got NOTHING");
-            panic!()
+            Err(DebuggerError::VarExprReturnedNothing(
+                "No pieces".to_string(),
+            ))
         } else {
             let loc = pieces[0].location.clone();
             trace!("location for the expression: {loc:?}");

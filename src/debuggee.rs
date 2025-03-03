@@ -64,7 +64,7 @@ impl Debuggee {
     /// or if the process cannot be accessed.
     pub(crate) fn build(
         pid: Pid,
-        dbginfo: CMDebugInfo<'_>,
+        dbginfo: &CMDebugInfo<'_>,
         breakpoints: HashMap<Addr, Breakpoint>,
     ) -> Result<Self> {
         let mut symbols = Vec::new();
@@ -229,9 +229,7 @@ impl Debuggee {
         let out: Disassembly = Disassembly::disassemble(&data_raw, addr, &bp_indexes)?;
 
         for idx in bp_indexes {
-            if !self.breakpoints.contains_key(&(addr + idx)) {
-                panic!("a stored index that we thought had a breakpoint did not actually have a breakpoint")
-            }
+            assert!(self.breakpoints.contains_key(&(addr + idx)), "a stored index that we thought had a breakpoint did not actually have a breakpoint");
             if !literal {
                 data_raw[idx] = INT3_BYTE;
             }
@@ -240,7 +238,7 @@ impl Debuggee {
         Ok(out)
     }
 
-    /// Creates an OwnedSymbol from a DWARF debugging information entry
+    /// Creates an [`OwnedSymbol`] from a DWARF debugging information entry
     ///
     /// # Parameters
     ///
@@ -270,7 +268,7 @@ impl Debuggee {
         let kind = SymbolKind::try_from(entry.tag())?;
         let low = Self::parse_addr_low(dwarf, unit, entry.attr(DW_AT_low_pc)?, base_addr)?;
         let high = Self::parse_addr_high(entry.attr(DW_AT_high_pc)?, low)?;
-        let datatype: Option<usize> = Self::parse_datatype(entry.attr(DW_AT_type)?)?;
+        let datatype: Option<usize> = Self::parse_datatype(entry.attr(DW_AT_type)?);
         let location: Option<Attribute<GimliReaderThing>> = entry.attr(DW_AT_location)?;
         let frame_base: Option<Attribute<GimliReaderThing>> = entry.attr(DW_AT_frame_base)?;
 
@@ -344,7 +342,7 @@ impl Debuggee {
     pub fn get_symbol_by_name(&self, name: impl Display) -> Result<Vec<OwnedSymbol>> {
         let all: Vec<OwnedSymbol> = self
             .symbols_query(|a| a.name() == Some(&name.to_string()))
-            .to_vec();
+            .clone();
 
         Ok(all)
     }
@@ -455,7 +453,7 @@ impl Debuggee {
     ///
     /// # Errors
     ///
-    /// This function can fail if [Self::get_symbol_by_offset] fails.
+    /// This function can fail if [`Self::get_symbol_by_offset`] fails.
     #[inline]
     pub fn get_type_for_symbol(&self, sym: &OwnedSymbol) -> Result<Option<OwnedSymbol>> {
         if let Some(dt) = sym.datatype() {
@@ -470,6 +468,7 @@ impl Debuggee {
     /// # Returns
     ///
     /// A slice containing all (root) debug symbols
+    #[must_use]
     pub fn symbols(&self) -> &[OwnedSymbol] {
         &self.symbols
     }
@@ -501,6 +500,7 @@ impl Debuggee {
     ///
     /// This function can fail if the stack memory cannot be read or if the
     /// register values are not accessible.
+    #[allow(clippy::similar_names)] // not my fault they named the registers that
     pub fn get_stack(&self) -> Result<Stack> {
         let rbp: Addr = get_reg(self.pid, crate::Register::rbp)?.into();
         let rsp: Addr = get_reg(self.pid, crate::Register::rsp)?.into();

@@ -43,6 +43,7 @@ pub type Result<T> = std::result::Result<T, DebuggerError>;
 /// }
 /// ```
 #[derive(Error, Debug)]
+#[allow(missing_docs)] // its just error types
 pub enum DebuggerError {
     #[error("Os error: {0}")]
     Os(#[from] nix::Error),
@@ -127,7 +128,7 @@ impl Serialize for DebuggerError {
         let error_type = match self {
             DebuggerError::Os(_) => "OS",
             DebuggerError::Io(_) => "IO",
-            DebuggerError::ExecutableDoesNotExist(_) => "DoesNotExist",
+            DebuggerError::ExecutableDoesNotExist(_) => "ExecutableDoesNotExist",
             DebuggerError::ExecutableIsNotAFile(_) => "Is NotAFile",
             DebuggerError::CStringConv(_) => "CStringConversion",
             DebuggerError::NoDebugee => "NoDebuggee",

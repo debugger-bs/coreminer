@@ -31,7 +31,7 @@ use serde::{Serialize, Serializer};
 /// Represents a piece of text and its kind (e.g., mnemonic, register, number)
 /// in the disassembled instruction.
 ///
-/// This can later be used by a [crate::ui::DebuggerUI] to color different parts of the
+/// This can later be used by a [`crate::ui::DebuggerUI`] to color different parts of the
 /// disassembly.
 pub type TextContent = (String, FormatterTextKind);
 
@@ -53,8 +53,8 @@ struct DisassemblyOutput(Vec<TextContent>);
 /// including the address, raw bytes, formatted text content, and whether each
 /// instruction has a breakpoint set.
 ///
-/// This is best used from either [crate::debugger::Debugger::disassemble_at] or
-/// [crate::debuggee::Debuggee::disassemble].
+/// This is best used from either [`crate::debugger::Debugger::disassemble_at`] or
+/// [`crate::debuggee::Debuggee::disassemble`].
 ///
 /// # Examples
 ///
@@ -146,6 +146,7 @@ impl Disassembly {
     /// # Returns
     ///
     /// A new empty [`Disassembly`] instance
+    #[must_use]
     pub fn empty() -> Self {
         Self { vec: Vec::new() }
     }
@@ -240,6 +241,7 @@ impl Disassembly {
     ///
     /// A slice containing tuples of (address, raw bytes, text content, has breakpoint?)
     /// for each disassembled instruction.
+    #[must_use]
     pub fn inner(&self) -> &[(Addr, Vec<u8>, Vec<TextContent>, bool)] {
         &self.vec
     }
@@ -250,6 +252,7 @@ impl Disassembly {
     ///
     /// A mutable vector containing tuples of (address, raw bytes, text content, has breakpoint?)
     /// for each disassembled instruction.
+    #[must_use]
     pub fn inner_mut(&mut self) -> &mut Vec<(Addr, Vec<u8>, Vec<TextContent>, bool)> {
         &mut self.vec
     }
@@ -264,6 +267,7 @@ impl Disassembly {
     ///
     /// `true` if the disassembly contains an instruction at the given address,
     /// `false` otherwise.
+    #[must_use]
     pub fn has_entry_for(&self, addr: Addr) -> bool {
         self.vec.iter().any(|(a, _raw, _val, _bp)| *a == addr)
     }
@@ -282,9 +286,10 @@ impl Disassembly {
     /// This function will panic if an instruction at the given address already exists
     /// in the disassembly.
     pub fn write_to_line(&mut self, addr: Addr, raw: &[u8], content: &[TextContent], has_bp: bool) {
-        if self.has_entry_for(addr) {
-            panic!("tried to insert line which was already disassembled")
-        }
+        assert!(
+            !self.has_entry_for(addr),
+            "tried to insert line which was already disassembled"
+        );
         self.vec
             .push((addr, raw.to_vec(), content.to_vec(), has_bp));
     }
@@ -337,7 +342,7 @@ impl Display for Disassembly {
             } else {
                 write!(f, "{:<4}", "")?;
             }
-            write!(f, "{:<20}\t", buf2)?;
+            write!(f, "{buf2:<20}\t")?;
             buf2.clear();
             for (thing, _kind) in content {
                 write!(f, "{thing}")?;
@@ -358,7 +363,7 @@ impl From<&TextContent> for SerializableTextContent {
 }
 
 fn serialize_disassembly_vec<S>(
-    data: &Vec<(Addr, Vec<u8>, Vec<TextContent>, bool)>,
+    data: &[(Addr, Vec<u8>, Vec<TextContent>, bool)],
     serializer: S,
 ) -> std::result::Result<S::Ok, S::Error>
 where

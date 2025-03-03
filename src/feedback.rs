@@ -131,6 +131,7 @@ impl From<Result<Feedback, DebuggerError>> for Feedback {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[allow(missing_docs)] // name of the reg and their values, self explanatory
 pub struct UserRegs {
     pub r15: u64,
     pub r14: u64,

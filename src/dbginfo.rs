@@ -44,7 +44,7 @@ pub struct CMDebugInfo<'executable> {
 /// DWARF debug information, such as functions, variables, types, etc.
 ///
 /// This is not an exhaustive enumeration and merely focuses on the most
-/// important kinds for this debugger. Uncovered types are treated as [SymbolKind::Other].
+/// important kinds for this debugger. Uncovered types are treated as [`SymbolKind::Other`].
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize)]
 #[non_exhaustive]
 pub enum SymbolKind {
@@ -103,7 +103,7 @@ impl OwnedSymbol {
     /// Creates a new symbol with the given parameters
     ///
     /// The parameters of this function only include the necessary parameters. Optional fields like
-    /// the datatype can be set with the respective functions, e.g. [Self::set_datatype].
+    /// the datatype can be set with the respective functions, e.g. [`Self::set_datatype`].
     ///
     /// # Parameters
     ///
@@ -112,12 +112,13 @@ impl OwnedSymbol {
     /// * `children` - Child symbols within this symbol's scope
     /// * `encoding` - The DWARF encoding information
     ///
-    /// The many optional parameters are available, e.g. with [OwnedSymbol::name] and
-    /// [OwnedSymbol::set_name].
+    /// The many optional parameters are available, e.g. with [`OwnedSymbol::name`] and
+    /// [`OwnedSymbol::set_name`].
     ///
     /// # Returns
     ///
     /// A new `OwnedSymbol` instance
+    #[must_use]
     pub fn new(
         code: usize,
         kind: SymbolKind,
@@ -139,90 +140,123 @@ impl OwnedSymbol {
         }
     }
 
+    /// Sets the offset of this [`OwnedSymbol`].
     pub fn set_offset(&mut self, offset: usize) {
         self.offset = offset;
     }
 
+    /// Sets the name of this [`OwnedSymbol`].
     pub fn set_name(&mut self, name: Option<String>) {
         self.name = name;
     }
 
+    /// Sets the low addr of this [`OwnedSymbol`].
     pub fn set_low_addr(&mut self, low_addr: Option<Addr>) {
         self.low_addr = low_addr;
     }
 
+    /// Sets the high addr of this [`OwnedSymbol`].
     pub fn set_high_addr(&mut self, high_addr: Option<Addr>) {
         self.high_addr = high_addr;
     }
 
+    /// Sets the datatype of this [`OwnedSymbol`].
     pub fn set_datatype(&mut self, datatype: Option<usize>) {
         self.datatype = datatype;
     }
 
+    /// Sets the kind of this [`OwnedSymbol`].
     pub fn set_kind(&mut self, kind: SymbolKind) {
         self.kind = kind;
     }
 
+    /// Sets the children of this [`OwnedSymbol`].
     pub fn set_children(&mut self, children: Vec<Self>) {
         self.children = children;
     }
 
+    /// Sets the location of this [`OwnedSymbol`].
     pub fn set_location(&mut self, location: Option<Attribute<GimliReaderThing>>) {
         self.location = location;
     }
 
+    /// Sets the frame base of this [`OwnedSymbol`].
     pub fn set_frame_base(&mut self, frame_base: Option<Attribute<GimliReaderThing>>) {
         self.frame_base = frame_base;
     }
 
+    /// Sets the byte size of this [`OwnedSymbol`].
     pub fn set_byte_size(&mut self, byte_size: Option<usize>) {
         self.byte_size = byte_size;
     }
 
+    /// Sets the encoding of this [`OwnedSymbol`].
     pub fn set_encoding(&mut self, encoding: gimli::Encoding) {
         self.encoding = encoding;
     }
 
+    /// Returns the offset of this [`OwnedSymbol`].
+    #[must_use]
     pub fn offset(&self) -> usize {
         self.offset
     }
 
+    /// Returns the name of this [`OwnedSymbol`].
+    #[must_use]
     pub fn name(&self) -> Option<&str> {
         self.name.as_deref()
     }
 
+    /// Returns the low addr of this [`OwnedSymbol`].
+    #[must_use]
     pub fn low_addr(&self) -> Option<Addr> {
         self.low_addr
     }
 
+    /// Returns the high addr of this [`OwnedSymbol`].
+    #[must_use]
     pub fn high_addr(&self) -> Option<Addr> {
         self.high_addr
     }
 
+    /// Returns the datatype of this [`OwnedSymbol`].
+    #[must_use]
     pub fn datatype(&self) -> Option<usize> {
         self.datatype
     }
 
+    /// Returns the kind of this [`OwnedSymbol`].
+    #[must_use]
     pub fn kind(&self) -> SymbolKind {
         self.kind
     }
 
+    /// Returns a reference to the children of this [`OwnedSymbol`].
+    #[must_use]
     pub fn children(&self) -> &[OwnedSymbol] {
         &self.children
     }
 
+    /// Returns the location of this [`OwnedSymbol`].
+    #[must_use]
     pub fn location(&self) -> Option<&Attribute<GimliReaderThing>> {
         self.location.as_ref()
     }
 
+    /// Returns the frame base of this [`OwnedSymbol`].
+    #[must_use]
     pub fn frame_base(&self) -> Option<&Attribute<GimliReaderThing>> {
         self.frame_base.as_ref()
     }
 
+    /// Returns the byte size of this [`OwnedSymbol`].
+    #[must_use]
     pub fn byte_size(&self) -> Option<usize> {
         self.byte_size
     }
 
+    /// Returns the encoding of this [`OwnedSymbol`].
+    #[must_use]
     pub fn encoding(&self) -> Encoding {
         self.encoding
     }
@@ -250,6 +284,10 @@ impl<'executable> CMDebugInfo<'executable> {
     ///
     /// This function will return an error if the DWARF information in the object file
     /// is invalid or cannot be parsed.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the dwarf information cannot be loaded
     pub fn build(object_info: object::File<'executable>) -> Result<Self> {
         let loader = |section: gimli::SectionId| -> std::result::Result<_, ()> {
             // does never fail surely
@@ -313,6 +351,7 @@ impl Debug for OwnedSymbol {
             )
             .field("byte_size", &self.byte_size)
             .field("children", &self.children)
+            .field("encoding", &self.encoding)
             .finish()
     }
 }
@@ -353,18 +392,6 @@ where
 {
     let mut relevant = Vec::new();
 
-    fn finder<F>(buf: &mut Vec<OwnedSymbol>, s: &OwnedSymbol, fil: &F)
-    where
-        F: Fn(&OwnedSymbol) -> bool,
-    {
-        for c in s.children() {
-            finder(buf, c, fil);
-        }
-        if fil(s) {
-            buf.push(s.clone());
-        }
-    }
-
     for s in haystack {
         finder(&mut relevant, s, &fil);
     }
@@ -380,6 +407,17 @@ fn dbg_large_option<T>(o: Option<T>) -> &'static str {
     match o {
         Some(_inner) => "Some(...)",
         None => "None",
+    }
+}
+fn finder<F>(buf: &mut Vec<OwnedSymbol>, s: &OwnedSymbol, fil: &F)
+where
+    F: Fn(&OwnedSymbol) -> bool,
+{
+    for c in s.children() {
+        finder(buf, c, fil);
+    }
+    if fil(s) {
+        buf.push(s.clone());
     }
 }
 

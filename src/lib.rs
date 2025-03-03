@@ -91,9 +91,10 @@ pub type Word = i64;
 /// Number of bytes in a [Word] (8 bytes on a 64-bit system)
 pub const WORD_BYTES: usize = Word::BITS as usize / 8;
 
-/// CPU register names for x86_64 architecture
+/// CPU register names for `x86_64` architecture
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[allow(non_camel_case_types)]
+#[allow(missing_docs)] // just register names, self explanatory
 pub enum Register {
     r15,
     r14,
@@ -245,6 +246,10 @@ pub(crate) fn mem_write(data_raw: &[u8], pid: Pid, addr: Addr) -> Result<usize> 
 }
 
 /// Gets the value of a specified register for the target process
+///
+/// # Errors
+///
+/// This function will return an error if [`ptrace::getregs`] fails.
 pub fn get_reg(pid: Pid, r: Register) -> Result<u64> {
     let regs = ptrace::getregs(pid)?;
 
@@ -282,6 +287,10 @@ pub fn get_reg(pid: Pid, r: Register) -> Result<u64> {
 }
 
 /// Sets the value of a specified register for the target process
+///
+/// # Errors
+///
+/// This function will return an error if [`ptrace::getregs`] or [`ptrace::setregs`] fail.
 pub fn set_reg(pid: Pid, r: Register, v: u64) -> Result<()> {
     let mut regs = ptrace::getregs(pid)?;
 
