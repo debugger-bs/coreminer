@@ -1,4 +1,4 @@
-use std::io::BufReader;
+use std::io::{BufRead, BufReader};
 
 use serde_json::json;
 use tracing::error;
@@ -20,8 +20,11 @@ impl DebuggerUI for JsonUI {
         println!("{}", json!({ "feedback": feedback }));
 
         let mut reader = BufReader::new(std::io::stdin());
+        let mut buf = Vec::new();
         loop {
-            match serde_json::from_reader(&mut reader) {
+            buf.clear();
+            reader.read_until(b'\n', &mut buf)?;
+            match serde_json::from_slice(&buf) {
                 Ok(a) => return Ok(a),
                 Err(e) => {
                     error!("{e}");
