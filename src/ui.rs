@@ -46,8 +46,12 @@ pub mod json;
 ///
 /// // Command to set a register value
 /// let status = Status::SetRegister(Register::rax, 0x42);
+///
+/// // Command to run a executable in the debugger
+/// let status = Status::Run(Path::new("/bin/ls").into(), vec![]);
 /// ```
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "PascalCase")]
 pub enum Status {
     /// Generate a backtrace of the call stack
     Backtrace,
