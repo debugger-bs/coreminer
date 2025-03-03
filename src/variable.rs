@@ -12,6 +12,7 @@
 //! - [`VariableValue`]: An enum representing different forms of variable values
 //! - Methods on the [`Debuggee`](crate::debuggee::Debuggee) for variable access
 
+use serde::Serialize;
 use tracing::{info, trace};
 
 use crate::dbginfo::{search_through_symbols, OwnedSymbol, SymbolKind};
@@ -53,7 +54,7 @@ pub type VariableExpression = String;
 /// // Convert a variable value to a u64
 /// let value_as_u64 = bytes_value.to_u64();
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum VariableValue {
     /// Raw byte representation of a value
     Bytes(Vec<u8>),
@@ -62,6 +63,7 @@ pub enum VariableValue {
     Other(Word),
 
     /// DWARF numeric value
+    #[serde(serialize_with = "serialize_gimli_value")]
     Numeric(gimli::Value),
 }
 
@@ -422,6 +424,28 @@ impl Debuggee {
         };
 
         Ok(value)
+    }
+}
+
+fn serialize_gimli_value<S>(
+    value: &gimli::Value,
+    serializer: S,
+) -> std::result::Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    match value {
+        gimli::Value::U8(v) => serializer.serialize_u8(*v),
+        gimli::Value::I8(v) => serializer.serialize_i8(*v),
+        gimli::Value::U16(v) => serializer.serialize_u16(*v),
+        gimli::Value::I16(v) => serializer.serialize_i16(*v),
+        gimli::Value::U32(v) => serializer.serialize_u32(*v),
+        gimli::Value::I32(v) => serializer.serialize_i32(*v),
+        gimli::Value::U64(v) => serializer.serialize_u64(*v),
+        gimli::Value::I64(v) => serializer.serialize_i64(*v),
+        gimli::Value::F32(v) => serializer.serialize_f32(*v),
+        gimli::Value::F64(v) => serializer.serialize_f64(*v),
+        gimli::Value::Generic(v) => serializer.serialize_u64(*v),
     }
 }
 

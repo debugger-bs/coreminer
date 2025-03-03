@@ -40,12 +40,30 @@
 //! }
 //! ```
 
+#![warn(missing_docs)]
+#![warn(clippy::missing_errors_doc)]
+#![warn(clippy::missing_panics_doc)]
+#![warn(clippy::missing_safety_doc)]
+#![warn(clippy::panic)]
+#![warn(clippy::todo)]
+#![warn(clippy::pedantic)]
+#![warn(clippy::all)]
+#![warn(clippy::empty_docs)]
+// i64 to u64 is not always working, trust the user not
+// to do something stupid for that
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::cast_possible_wrap)]
+// I'm not doing state machines, and renaming true and false makes no sense
+#![allow(clippy::struct_excessive_bools)]
+
 use std::array::TryFromSliceError;
 use std::io::{Read, Seek, Write};
 use std::str::FromStr;
 
 use nix::sys::ptrace;
 use nix::unistd::Pid;
+use serde::{Deserialize, Serialize};
 
 use crate::errors::Result;
 
@@ -62,6 +80,7 @@ pub mod disassemble;
 pub mod dwarf_parse;
 pub mod errors;
 pub mod feedback;
+pub mod memorymap;
 pub mod stack;
 pub mod ui;
 pub mod unwind;
@@ -72,9 +91,10 @@ pub type Word = i64;
 /// Number of bytes in a [Word] (8 bytes on a 64-bit system)
 pub const WORD_BYTES: usize = Word::BITS as usize / 8;
 
-/// CPU register names for x86_64 architecture
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// CPU register names for `x86_64` architecture
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[allow(non_camel_case_types)]
+#[allow(missing_docs)] // just register names, self explanatory
 pub enum Register {
     r15,
     r14,
@@ -226,6 +246,10 @@ pub(crate) fn mem_write(data_raw: &[u8], pid: Pid, addr: Addr) -> Result<usize> 
 }
 
 /// Gets the value of a specified register for the target process
+///
+/// # Errors
+///
+/// This function will return an error if [`ptrace::getregs`] fails.
 pub fn get_reg(pid: Pid, r: Register) -> Result<u64> {
     let regs = ptrace::getregs(pid)?;
 
@@ -263,6 +287,10 @@ pub fn get_reg(pid: Pid, r: Register) -> Result<u64> {
 }
 
 /// Sets the value of a specified register for the target process
+///
+/// # Errors
+///
+/// This function will return an error if [`ptrace::getregs`] or [`ptrace::setregs`] fail.
 pub fn set_reg(pid: Pid, r: Register, v: u64) -> Result<()> {
     let mut regs = ptrace::getregs(pid)?;
 

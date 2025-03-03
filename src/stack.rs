@@ -11,6 +11,8 @@
 
 use std::fmt::Display;
 
+use serde::Serialize;
+
 use crate::{Addr, Word, WORD_BYTES};
 
 /// Represents the stack of a debugged process
@@ -40,7 +42,7 @@ use crate::{Addr, Word, WORD_BYTES};
 ///     println!("{:#x}", word);
 /// }
 /// ```
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Stack {
     start_addr: Addr,
     words: Vec<Word>,
@@ -56,6 +58,7 @@ impl Stack {
     /// # Returns
     ///
     /// A new empty [`Stack`] instance with the specified starting address
+    #[must_use]
     pub fn new(start_addr: Addr) -> Self {
         Self {
             start_addr,
@@ -87,6 +90,7 @@ impl Stack {
     /// # Returns
     ///
     /// A slice containing all words stored on the stack
+    #[must_use]
     pub fn words(&self) -> &[Word] {
         &self.words
     }

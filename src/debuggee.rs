@@ -16,13 +16,14 @@ use gimli::{
 };
 use nix::sys::ptrace;
 use nix::unistd::Pid;
-use proc_maps::MapRange;
 use tracing::{debug, warn};
 
 use crate::breakpoint::{Breakpoint, INT3_BYTE};
 use crate::dbginfo::{search_through_symbols, CMDebugInfo, OwnedSymbol, SymbolKind};
 use crate::disassemble::Disassembly;
 use crate::dwarf_parse::GimliReaderThing;
+use crate::errors::DebuggerError;
+use crate::memorymap::ProcessMemoryMap;
 use crate::stack::Stack;
 use crate::{get_reg, mem_read_word, Result};
 use crate::{mem_read, Addr};
@@ -63,7 +64,7 @@ impl Debuggee {
     /// or if the process cannot be accessed.
     pub(crate) fn build(
         pid: Pid,
-        dbginfo: CMDebugInfo<'_>,
+        dbginfo: &CMDebugInfo<'_>,
         breakpoints: HashMap<Addr, Breakpoint>,
     ) -> Result<Self> {
         let mut symbols = Vec::new();
@@ -108,14 +109,14 @@ impl Debuggee {
     ///
     /// # Returns
     ///
-    /// * `Ok(Vec<MapRange>)` - The memory map of the process
+    /// * `Ok(ProcessMemoryMap)` - The memory map of the process
     /// * `Err(DebuggerError)` - If the memory map could not be retrieved
     ///
     /// # Errors
     ///
     /// This function can fail if the process's memory map cannot be accessed.
-    fn get_process_map_by_pid(pid: Pid) -> Result<Vec<MapRange>> {
-        Ok(proc_maps::get_process_maps(pid.into())?)
+    fn get_process_map_by_pid(pid: Pid) -> Result<ProcessMemoryMap> {
+        Ok(proc_maps::get_process_maps(pid.into())?.into())
     }
 
     /// Gets the base address of a process by its PID
@@ -136,21 +137,27 @@ impl Debuggee {
     ///
     /// This function can fail if the process's memory map cannot be accessed.
     pub fn get_base_addr_by_pid(pid: Pid) -> Result<Addr> {
-        Ok(Self::get_process_map_by_pid(pid)?[0].start().into())
+        let process_map = Self::get_process_map_by_pid(pid)?;
+        if process_map.regions.is_empty() {
+            return Err(DebuggerError::NoDebugee);
+        }
+
+        // Get the start address of the first memory region
+        Ok(process_map.regions[0].start_address)
     }
 
     /// Gets the memory map of the debugged process
     ///
     /// # Returns
     ///
-    /// * `Ok(Vec<MapRange>)` - The memory map of the process
+    /// * `Ok(ProcessMemoryMap)` - The memory map of the process
     /// * `Err(DebuggerError)` - If the memory map could not be retrieved
     ///
     /// # Errors
     ///
     /// This function can fail if the process's memory map cannot be accessed.
     #[inline]
-    pub fn get_process_map(&self) -> Result<Vec<MapRange>> {
+    pub fn get_process_map(&self) -> Result<ProcessMemoryMap> {
         Self::get_process_map_by_pid(self.pid)
     }
 
@@ -222,9 +229,7 @@ impl Debuggee {
         let out: Disassembly = Disassembly::disassemble(&data_raw, addr, &bp_indexes)?;
 
         for idx in bp_indexes {
-            if !self.breakpoints.contains_key(&(addr + idx)) {
-                panic!("a stored index that we thought had a breakpoint did not actually have a breakpoint")
-            }
+            assert!(self.breakpoints.contains_key(&(addr + idx)), "a stored index that we thought had a breakpoint did not actually have a breakpoint");
             if !literal {
                 data_raw[idx] = INT3_BYTE;
             }
@@ -233,7 +238,7 @@ impl Debuggee {
         Ok(out)
     }
 
-    /// Creates an OwnedSymbol from a DWARF debugging information entry
+    /// Creates an [`OwnedSymbol`] from a DWARF debugging information entry
     ///
     /// # Parameters
     ///
@@ -263,7 +268,7 @@ impl Debuggee {
         let kind = SymbolKind::try_from(entry.tag())?;
         let low = Self::parse_addr_low(dwarf, unit, entry.attr(DW_AT_low_pc)?, base_addr)?;
         let high = Self::parse_addr_high(entry.attr(DW_AT_high_pc)?, low)?;
-        let datatype: Option<usize> = Self::parse_datatype(entry.attr(DW_AT_type)?)?;
+        let datatype: Option<usize> = Self::parse_datatype(entry.attr(DW_AT_type)?);
         let location: Option<Attribute<GimliReaderThing>> = entry.attr(DW_AT_location)?;
         let frame_base: Option<Attribute<GimliReaderThing>> = entry.attr(DW_AT_frame_base)?;
 
@@ -337,7 +342,7 @@ impl Debuggee {
     pub fn get_symbol_by_name(&self, name: impl Display) -> Result<Vec<OwnedSymbol>> {
         let all: Vec<OwnedSymbol> = self
             .symbols_query(|a| a.name() == Some(&name.to_string()))
-            .to_vec();
+            .clone();
 
         Ok(all)
     }
@@ -448,7 +453,7 @@ impl Debuggee {
     ///
     /// # Errors
     ///
-    /// This function can fail if [Self::get_symbol_by_offset] fails.
+    /// This function can fail if [`Self::get_symbol_by_offset`] fails.
     #[inline]
     pub fn get_type_for_symbol(&self, sym: &OwnedSymbol) -> Result<Option<OwnedSymbol>> {
         if let Some(dt) = sym.datatype() {
@@ -463,6 +468,7 @@ impl Debuggee {
     /// # Returns
     ///
     /// A slice containing all (root) debug symbols
+    #[must_use]
     pub fn symbols(&self) -> &[OwnedSymbol] {
         &self.symbols
     }
@@ -494,6 +500,7 @@ impl Debuggee {
     ///
     /// This function can fail if the stack memory cannot be read or if the
     /// register values are not accessible.
+    #[allow(clippy::similar_names)] // not my fault they named the registers that
     pub fn get_stack(&self) -> Result<Stack> {
         let rbp: Addr = get_reg(self.pid, crate::Register::rbp)?.into();
         let rsp: Addr = get_reg(self.pid, crate::Register::rsp)?.into();
