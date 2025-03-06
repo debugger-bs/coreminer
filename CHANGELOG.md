@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/debugger-bs/coreminer/compare/v0.2.1...v0.2.2)
+
+### 📚 Documentation
+
+- Fix typo in link of readme - ([d6ff688](https://github.com/debugger-bs/coreminer/commit/d6ff6889ae43ff798c09d76f899c5de132580661))
+
+
 ## [0.2.1](https://github.com/debugger-bs/coreminer/compare/v0.2.0...v0.2.1)
 
 ### 🐛 Bug Fixes
